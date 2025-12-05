@@ -15,6 +15,9 @@ pub fn create_server() {
         Box::new(tools::etw::EtwMonitor),
         Box::new(tools::proxy::HttpsProxy),
         Box::new(tools::yara::YaraScanner),
+        Box::new(tools::wrappers::external::CapaTool),
+        Box::new(tools::wrappers::external::FlossTool),
+        Box::new(tools::wrappers::external::ProcDumpTool),
     ];
 
     tracing::info!("Registered {} tools", tools.len());

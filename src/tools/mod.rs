@@ -11,6 +11,7 @@ pub mod network;
 pub mod etw;
 pub mod proxy;
 pub mod yara;
+pub mod wrappers;
 
 #[async_trait]
 pub trait Tool: Send + Sync {

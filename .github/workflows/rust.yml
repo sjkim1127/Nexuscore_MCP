@@ -29,3 +29,9 @@ jobs:
       
     - name: Run tests
       run: cargo test --verbose
+
+    - name: Run cargo-tarpaulin
+      run: |
+        cargo install cargo-tarpaulin
+        cargo tarpaulin --verbose --workspace --timeout 120 --out Xml
+      continue-on-error: true # Don't fail build if coverage fails for now

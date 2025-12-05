@@ -15,9 +15,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    
-    # Pre-requisite: Install things if needed (e.g. LLVM for Frida), though actions usually have them.
-    # Frida compilation might be heavy, caching is recommended.
+
+    # bindgen needs Clang
+    - name: Install LLVM and Clang
+      run: choco install llvm -y
+
+    # Ensure libclang is in path for bindgen
+    - name: Set LIBCLANG_PATH
+      run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
     - name: Build
       run: cargo build --verbose

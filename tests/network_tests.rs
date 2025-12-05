@@ -1,5 +1,5 @@
-use nexuscore_mcp::tools::network::NetworkCapture;
-use nexuscore_mcp::tools::proxy::HttpsProxy;
+use nexuscore_mcp::tools::common::network::NetworkCapture;
+use nexuscore_mcp::tools::malware::proxy::HttpsProxy;
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
 

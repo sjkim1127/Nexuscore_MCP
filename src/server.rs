@@ -3,21 +3,24 @@ use crate::tools::{self, Tool};
 
 pub fn create_server() {
     let tools: Vec<Box<dyn Tool>> = vec![
-        Box::new(tools::process::SpawnProcess),
-        Box::new(tools::process::AttachProcess),
-        Box::new(tools::process::ResumeProcess),
-        Box::new(tools::memory::ReadMemory),
-        Box::new(tools::memory::SearchMemory),
-        Box::new(tools::hook::InstallHook),
-        Box::new(tools::defender::DefenderBot),
-        Box::new(tools::codeql::CodeQLScanner),
-        Box::new(tools::network::NetworkCapture),
-        Box::new(tools::etw::EtwMonitor),
-        Box::new(tools::proxy::HttpsProxy),
-        Box::new(tools::yara::YaraScanner),
-        Box::new(tools::wrappers::external::CapaTool),
-        Box::new(tools::wrappers::external::FlossTool),
-        Box::new(tools::wrappers::external::ProcDumpTool),
+        // Common Tools
+        Box::new(tools::common::process::SpawnProcess),
+        Box::new(tools::common::process::AttachProcess),
+        Box::new(tools::common::process::ResumeProcess),
+        Box::new(tools::common::memory::ReadMemory),
+        Box::new(tools::common::memory::SearchMemory),
+        Box::new(tools::common::hook::InstallHook),
+        Box::new(tools::common::network::NetworkCapture),
+        
+        // Malware Tools
+        Box::new(tools::malware::defender::DefenderBot),
+        Box::new(tools::malware::codeql::CodeQLScanner),
+        Box::new(tools::malware::etw::EtwMonitor),
+        Box::new(tools::malware::proxy::HttpsProxy),
+        Box::new(tools::malware::yara::YaraScanner),
+        Box::new(tools::malware::wrappers::external::CapaTool),
+        Box::new(tools::malware::wrappers::external::FlossTool),
+        Box::new(tools::malware::wrappers::external::ProcDumpTool),
     ];
 
     tracing::info!("Registered {} tools", tools.len());

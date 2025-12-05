@@ -1,6 +1,6 @@
-use nexuscore_mcp::tools::etw::EtwMonitor;
-use nexuscore_mcp::tools::yara::YaraScanner;
-use nexuscore_mcp::tools::defender::DefenderBot;
+use nexuscore_mcp::tools::malware::etw::EtwMonitor;
+use nexuscore_mcp::tools::malware::yara::YaraScanner;
+use nexuscore_mcp::tools::malware::defender::DefenderBot;
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
 

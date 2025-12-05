@@ -1,5 +1,5 @@
-use nexuscore_mcp::tools::memory::{ReadMemory, SearchMemory};
-use nexuscore_mcp::tools::hook::InstallHook;
+use nexuscore_mcp::tools::common::memory::{ReadMemory, SearchMemory};
+use nexuscore_mcp::tools::common::hook::InstallHook;
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
 

@@ -19,6 +19,9 @@ yara = "0.31.0"
 hudsucker = "0.24.0"
 ring = "0.17.14"
 futures = "0.3.31"
+iced-x86 = "1.21.0"
+goblin = "0.10.4"
+hex = "0.4.3"
 
 [dev-dependencies]
 codecov = "0.4.1"

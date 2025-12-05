@@ -22,6 +22,10 @@ pub fn create_server() {
         Box::new(tools::malware::wrappers::external::FlossTool),
         Box::new(tools::malware::wrappers::external::ProcDumpTool),
         Box::new(tools::malware::wrappers::external::DieTool),
+        Box::new(tools::malware::disasm::CodeDisassembler),
+        Box::new(tools::malware::reconstruction::PeFixer),
+        Box::new(tools::malware::iat::IatFixer),
+        Box::new(tools::malware::unpacker::OepFinder),
     ];
 
     tracing::info!("Registered {} tools", tools.len());

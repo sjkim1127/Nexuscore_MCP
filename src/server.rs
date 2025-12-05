@@ -11,6 +11,10 @@ pub fn create_server() {
         Box::new(tools::hook::InstallHook),
         Box::new(tools::defender::DefenderBot),
         Box::new(tools::codeql::CodeQLScanner),
+        Box::new(tools::network::NetworkCapture),
+        Box::new(tools::etw::EtwMonitor),
+        Box::new(tools::proxy::HttpsProxy),
+        Box::new(tools::yara::YaraScanner),
     ];
 
     tracing::info!("Registered {} tools", tools.len());

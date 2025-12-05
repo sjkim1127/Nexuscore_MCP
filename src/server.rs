@@ -26,6 +26,7 @@ pub fn create_server() {
         Box::new(tools::malware::reconstruction::PeFixer),
         Box::new(tools::malware::iat::IatFixer),
         Box::new(tools::malware::unpacker::OepFinder),
+        Box::new(tools::malware::sandbox_submit::CapeSubmitter),
     ];
 
     tracing::info!("Registered {} tools", tools.len());

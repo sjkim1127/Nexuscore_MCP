@@ -27,6 +27,15 @@ hex = "0.4.3"
 rmcp = { version = "0.10.0", features = ["server"] }
 schemars = "1.1.0"
 
+# Phase 2: Advanced Tools
+unicorn-engine = "2.0"    # Shellcode emulation
+base64 = "0.21"           # Config extractor
+aes = "0.8"               # Config extractor
+cbc = "0.1"               # AES CBC mode
+rc4 = "0.1"               # Config extractor
+sha2 = "0.10"             # System diff (hashing)
+walkdir = "2.4"           # System diff (file walk)
+winapi = { version = "0.3", features = ["winuser"] } # Input simulation
+
 [dev-dependencies]
 mockito = "1.1.0"
-# mockito = "1.4" is preferred if not using old one.

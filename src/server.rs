@@ -64,6 +64,13 @@ impl NexusCoreServer {
         register!(tools::malware::callstack::CallstackTracer);
         register!(tools::malware::callstack::AddressTracer);
 
+        // --- Phase 2: Advanced Analysis Tools ---
+        register!(tools::malware::shellcode_emu::ShellcodeEmulator);
+        register!(tools::malware::config_extractor::ConfigExtractor);
+        register!(tools::network::fakenet::FakeNet);
+        register!(tools::system::input_sim::InputSimulator);
+        register!(tools::system::diff::SystemDiff);
+
         Self { tools }
     }
 }

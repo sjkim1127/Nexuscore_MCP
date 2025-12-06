@@ -6,6 +6,7 @@ pub mod common;
 pub mod malware;
 pub mod wrappers;
 pub mod system;
+pub mod network;
 
 #[async_trait]
 pub trait Tool: Send + Sync {

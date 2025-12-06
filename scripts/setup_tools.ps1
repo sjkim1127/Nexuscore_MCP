@@ -31,9 +31,10 @@ else {
     Write-Host "[+] Chocolatey is already installed." -ForegroundColor Green
 }
 
-# 2. Install Base Utilities via Chocolatey
-Write-Host "[*] Installing base utilities..." -ForegroundColor Cyan
-choco install -y git python 7zip.install wireshark
+# 2. Install Base Utilities & Development Tools via Chocolatey
+Write-Host "[*] Installing base utilities & Dev Tools..." -ForegroundColor Cyan
+# visualcpp-build-tools is required for Rust linker (link.exe)
+choco install -y git python 7zip.install wireshark rust visualcpp-build-tools
 
 # 3. Download & Install Analysis Tools function
 function Install-AnalysisTool {

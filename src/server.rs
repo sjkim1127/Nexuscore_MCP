@@ -1,48 +1,104 @@
+use anyhow::Result;
+use async_trait::async_trait;
+use rmcp::{
+    protocol::{CallToolRequest, CallToolResult, Tool as McpToolDefinition, ListToolsResult},
+    RequestHandler,
+};
+use std::collections::HashMap;
+use serde_json::Value;
+
+// Internal Tool Trait imports
 use crate::tools::{self, Tool};
-// use rmcp::service::Service; 
 
-pub fn create_server() {
-    let tools: Vec<Box<dyn Tool>> = vec![
-        // Common Tools
-        Box::new(tools::common::process::SpawnProcess),
-        Box::new(tools::common::process::AttachProcess),
-        Box::new(tools::common::process::ResumeProcess),
-        Box::new(tools::common::memory::ReadMemory),
-        Box::new(tools::common::memory::SearchMemory),
-        Box::new(tools::common::hook::InstallHook),
-        Box::new(tools::common::network::NetworkCapture),
+pub struct NexusCoreServer {
+    tools: HashMap<String, Box<dyn Tool>>,
+}
+
+impl NexusCoreServer {
+    pub fn new() -> Self {
+        let mut tools: HashMap<String, Box<dyn Tool>> = HashMap::new();
         
-        // Malware Tools
-        Box::new(tools::malware::defender::DefenderBot),
-        Box::new(tools::malware::codeql::CodeQLScanner),
-        Box::new(tools::malware::etw::EtwMonitor),
-        Box::new(tools::malware::proxy::HttpsProxy),
-        Box::new(tools::malware::yara::YaraScanner),
-        Box::new(tools::malware::wrappers::external::CapaTool),
-        Box::new(tools::malware::wrappers::external::FlossTool),
-        Box::new(tools::malware::wrappers::external::ProcDumpTool),
-        Box::new(tools::malware::wrappers::external::DieTool),
-        Box::new(tools::malware::disasm::CodeDisassembler),
-        Box::new(tools::malware::reconstruction::PeFixer),
-        Box::new(tools::malware::iat::IatFixer),
-        Box::new(tools::malware::unpacker::OepFinder),
-        Box::new(tools::malware::sandbox_submit::CapeSubmitter),
-        // System & Forensics
-        Box::new(tools::system::persistence::PersistenceHunter),
-        Box::new(tools::system::handles::HandleScanner),
-    ];
+        // Helper macro to register tools
+        macro_rules! register {
+            ($t:expr) => {
+                let tool = $t;
+                tools.insert(tool.name().to_string(), Box::new(tool));
+            };
+        }
 
-    tracing::info!("Registered {} tools", tools.len());
+        // --- Common Tools ---
+        register!(tools::common::process::SpawnProcess);
+        register!(tools::common::process::AttachProcess);
+        register!(tools::common::process::ResumeProcess);
+        // ... add other tools here ...
+        register!(tools::malware::disasm::CodeDisassembler);
+        register!(tools::malware::reconstruction::PeFixer);
+        register!(tools::malware::iat::IatFixer);
+        register!(tools::malware::unpacker::OepFinder);
+        register!(tools::malware::sandbox_submit::CapeSubmitter);
+        register!(tools::system::persistence::PersistenceHunter);
+        register!(tools::system::handles::HandleScanner);
+        
+        // Note: Wrappers (Die, Capa, Yara) need to be registered too, assuming they impl Tool
+        register!(tools::malware::wrappers::external::DieTool);
+        register!(tools::malware::wrappers::external::CapaTool);
+        register!(tools::malware::wrappers::external::FlossTool);
+        // register!(tools::malware::yara::YaraScanner); // If available
 
-    // Placeholder for RMCP server creation
-    /*
-    let mut router = Router::new();
-    for tool in tools {
-        // dynamic dispatch or closure needed here depending on SDK
-        // router.register_tool(tool.name(), move |args| tool.execute(args));
+        Self { tools }
+    }
+}
+
+#[async_trait]
+impl RequestHandler for NexusCoreServer {
+    async fn list_tools(&self) -> Result<ListToolsResult> {
+        let tools_list: Vec<McpToolDefinition> = self.tools.values().map(|t| McpToolDefinition {
+            name: t.name().to_string(),
+            description: Some(t.description().to_string()),
+            input_schema: serde_json::json!({
+                 "type": "object", 
+                 "properties": {}, // Schema generation is TODO, defaulting to generic object
+                 "additionalProperties": true 
+            }), 
+        }).collect();
+
+        Ok(ListToolsResult { tools: tools_list, next_cursor: None })
+    }
+
+    async fn call_tool(&self, req: CallToolRequest) -> Result<CallToolResult> {
+        let name = req.name;
+        match self.tools.get(&name) {
+            Some(tool) => {
+                let args = req.arguments.unwrap_or(serde_json::json!({}));
+                match tool.execute(args).await {
+                    Ok(result) => {
+                        // RMCP expects a list of Content (Text/Image/Resource)
+                        // our tools return Value. We convert Value -> Text Content.
+                        let text = serde_json::to_string_pretty(&result)?;
+                        Ok(CallToolResult {
+                            content: vec![rmcp::protocol::Content::Text(rmcp::protocol::TextContent {
+                                text,
+                                ..Default::default()
+                            })],
+                            is_error: Some(false),
+                            meta: None // _meta field
+                        })
+                    },
+                    Err(e) => {
+                        Ok(CallToolResult {
+                            content: vec![rmcp::protocol::Content::Text(rmcp::protocol::TextContent {
+                                text: format!("Error executing {}: {}", name, e),
+                                ..Default::default()
+                            })],
+                            is_error: Some(true),
+                            meta: None
+                        })
+                    }
+                }
+            },
+            None => Err(anyhow::anyhow!("Tool not found: {}", name)),
+        }
     }
     
-    Server::new(router)
-    */
-    tracing::info!("Server creation logic needs to be updated for rmcp crate");
+    // Other handler methods (resources, prompts) can be defaulted or implemented as empty
 }

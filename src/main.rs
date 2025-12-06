@@ -1,26 +1,30 @@
 use anyhow::Result;
 use dotenv::dotenv;
-use nexuscore_mcp::server;
+use tokio::io::{stdin, stdout};
+use nexuscore_mcp::server::NexusCoreServer;
+use rmcp::ServiceExt;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenv().ok(); // Load .env if present
+    dotenv().ok();
 
-    // Initialize logging
+    // Logging to file purely, or stderr? Stdio transport uses stdout, so NO LOGS to stdout!
+    // We must log to stderr.
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .init();
 
-    tracing::info!("Starting NexusCore MCP Server...");
+    tracing::info!("Starting NexusCore MCP Server (RMCP Standard)...");
 
-    // Create server instance
-    let _ = server::create_server();
-
-    // Start transport (stdio) - Placeholder
-    // rmcp might use a different mechanism.
-    tracing::info!("Server initialized. Ready to receive MCP requests via Stdio.");
+    // Initialize the Service (Server Handler)
+    let service = NexusCoreServer::new();
     
-    // Placeholder to keep tokio main happy
-    std::future::pending::<()>().await;
+    // Transport: Stdio
+    let transport = (stdin(), stdout());
+
+    // Run Server
+    tracing::info!("Listening on Stdio...");
+    let _ = service.serve(transport).await?;
+
     Ok(())
 }

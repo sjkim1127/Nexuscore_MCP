@@ -28,6 +28,8 @@ pcap-file = "2.0.0"
 hudsucker = "0.24.0"
 ring = "0.17.14"
 futures = "0.3.31"
+rmcp = { version = "0.10.0", features = ["server"] }
+schemars = "1.1.0"
 
 [dev-dependencies]
 Mockito = "1.1.0" # Lowercase name might be mockito, checking standard usage.

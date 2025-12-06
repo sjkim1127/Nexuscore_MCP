@@ -46,6 +46,24 @@ impl NexusCoreServer {
         register!(tools::malware::wrappers::external::FlossTool);
         // register!(tools::malware::yara::YaraScanner); // If available
 
+        // --- API Monitoring Tools ---
+        register!(tools::malware::api_monitor::ApiMonitor);
+        register!(tools::malware::api_monitor::FileMonitor);
+        register!(tools::malware::api_monitor::RegistryMonitor);
+        register!(tools::malware::api_monitor::NetworkMonitor);
+        register!(tools::malware::api_monitor::InjectionMonitor);
+
+        // --- Advanced Frida Tools ---
+        register!(tools::malware::memory_dump::MemoryDumper);
+        register!(tools::malware::memory_dump::MemoryPatcher);
+        register!(tools::malware::string_sniffer::StringSniffer);
+        register!(tools::malware::crypto_hook::CryptoHook);
+        register!(tools::malware::ssl_keylog::SslKeylogger);
+        register!(tools::malware::spoof_return::ReturnSpoofer);
+        register!(tools::malware::spoof_return::AddressSpoofer);
+        register!(tools::malware::callstack::CallstackTracer);
+        register!(tools::malware::callstack::AddressTracer);
+
         Self { tools }
     }
 }

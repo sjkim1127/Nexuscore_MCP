@@ -13,18 +13,18 @@
 
 ```mermaid
 graph LR
-    A[AI Agent (Claude/Cursor)] -- MCP Protocol (Stdio) --> B[NexusCore MCP]
+    A["AI Agent (Claude/Cursor)"] -- "MCP Protocol (Stdio)" --> B["NexusCore MCP"]
     
-    subgraph NexusCore Engine
-        B -- Spawn/Hook --> C[Frida Engine]
-        B -- Scan --> D[System Forensics]
-        B -- API --> E[External Tools]
+    subgraph "NexusCore Engine"
+        B -- "Spawn/Hook" --> C["Frida Engine"]
+        B -- "Scan" --> D["System Forensics"]
+        B -- "API" --> E["External Tools"]
     end
     
-    subgraph Host OS (Windows VM)
-        C -- Inject --> F[Malware Process]
-        E -- CLI --> G[Static Analysis (Die, Capa)]
-        D -- Monitor --> H[Registry & Handles]
+    subgraph "Host OS (Windows VM)"
+        C -- "Inject" --> F["Malware Process"]
+        E -- "CLI" --> G["Static Analysis (Die, Capa)"]
+        D -- "Monitor" --> H["Registry & Handles"]
     end
 ```
 
@@ -106,7 +106,7 @@ Add the following to your MCP Client configuration (e.g., `claude_desktop_config
 
 ---
 
-## � Analysis Scenario: "Cracking Themida"
+## 📚 Analysis Scenario: "Cracking Themida"
 
 1.  **Initial Triage**:
     *   Agent calls `die_scan` -> Result: "Themida / WinLicense 2.x".

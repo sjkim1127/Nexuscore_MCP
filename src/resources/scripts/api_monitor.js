@@ -12,14 +12,39 @@
     var config = typeof monitorConfig !== 'undefined' ? monitorConfig : { categories: ['file', 'registry', 'network', 'memory', 'process'] };
     var categories = config.categories || [];
 
+    // Batch buffering for performance
+    var eventQueue = [];
+    var lastFlush = Date.now();
+    var BATCH_SIZE = 20;
+    var FLUSH_INTERVAL = 500;
+
+    function flushEvents() {
+        if (eventQueue.length > 0) {
+            send({
+                type: 'api_batch',
+                count: eventQueue.length,
+                events: eventQueue
+            });
+            eventQueue = [];
+            lastFlush = Date.now();
+        }
+    }
+
+    // Periodic flush timer
+    setInterval(flushEvents, FLUSH_INTERVAL);
+
     function log(api, args) {
-        send({
-            type: 'api_call',
+        eventQueue.push({
             api: api,
             args: args,
             timestamp: Date.now(),
             tid: Process.getCurrentThreadId()
         });
+
+        // Flush if batch full
+        if (eventQueue.length >= BATCH_SIZE) {
+            flushEvents();
+        }
     }
 
     // ===================== FILE OPERATIONS =====================

@@ -12,6 +12,23 @@ static SNAPSHOT: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 pub struct SystemDiff;
 
+/// Scan files in background thread (non-blocking)
+fn scan_files_blocking(paths: Vec<String>) -> HashSet<String> {
+    let mut files = HashSet::new();
+    for scan_path in &paths {
+        for entry in WalkDir::new(scan_path)
+            .max_depth(5)
+            .into_iter()
+            .filter_map(|e| e.ok()) 
+        {
+            if entry.file_type().is_file() {
+                files.insert(entry.path().to_string_lossy().to_string());
+            }
+        }
+    }
+    files
+}
+
 #[async_trait]
 impl Tool for SystemDiff {
     fn name(&self) -> &str { "system_diff" }
@@ -26,20 +43,13 @@ impl Tool for SystemDiff {
 
         match action {
             "take" => {
-                let mut files = HashSet::new();
                 let start = SystemTime::now();
+                let paths_clone = paths.clone();
                 
-                for scan_path in &paths {
-                    for entry in WalkDir::new(scan_path)
-                        .max_depth(5) // Limit depth for performance
-                        .into_iter()
-                        .filter_map(|e| e.ok()) 
-                    {
-                        if entry.file_type().is_file() {
-                            files.insert(entry.path().to_string_lossy().to_string());
-                        }
-                    }
-                }
+                // Use spawn_blocking to avoid blocking async runtime
+                let files = tokio::task::spawn_blocking(move || {
+                    scan_files_blocking(paths_clone)
+                }).await.map_err(|e| anyhow::anyhow!("Spawn error: {}", e))?;
                 
                 let duration = start.elapsed().unwrap_or_default();
                 let count = files.len();
@@ -62,18 +72,12 @@ impl Tool for SystemDiff {
                 };
                 drop(lock); // Release lock before scanning
 
-                let mut new_files = HashSet::new();
-                for scan_path in &paths {
-                    for entry in WalkDir::new(scan_path)
-                        .max_depth(5)
-                        .into_iter()
-                        .filter_map(|e| e.ok()) 
-                    {
-                        if entry.file_type().is_file() {
-                            new_files.insert(entry.path().to_string_lossy().to_string());
-                        }
-                    }
-                }
+                let paths_clone = paths.clone();
+                
+                // Use spawn_blocking for the comparison scan too
+                let new_files = tokio::task::spawn_blocking(move || {
+                    scan_files_blocking(paths_clone)
+                }).await.map_err(|e| anyhow::anyhow!("Spawn error: {}", e))?;
 
                 // Find changes
                 let created: Vec<String> = new_files.difference(&old_files).cloned().collect();

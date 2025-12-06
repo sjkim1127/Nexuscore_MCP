@@ -4,11 +4,8 @@ use serde_json::Value;
 
 pub mod common;
 pub mod malware;
-pub mod game;
-pub mod iot;
-pub mod firmware;
-pub mod wrappers; // Fixed missing wrappers module
-pub mod system;   // Added system module
+pub mod wrappers;
+pub mod system;
 
 #[async_trait]
 pub trait Tool: Send + Sync {

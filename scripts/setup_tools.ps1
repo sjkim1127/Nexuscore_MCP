@@ -34,7 +34,15 @@ else {
 # 2. Install Base Utilities & Development Tools via Chocolatey
 Write-Host "[*] Installing base utilities & Dev Tools..." -ForegroundColor Cyan
 # visualcpp-build-tools is required for Rust linker (link.exe)
-choco install -y git python 7zip.install wireshark rust visualcpp-build-tools
+# llvm is required for frida-sys bindgen (libclang)
+choco install -y git python 7zip.install wireshark rust visualcpp-build-tools llvm
+
+# Set LIBCLANG_PATH for frida-sys
+$llvmPath = "C:\Program Files\LLVM\bin"
+if (Test-Path $llvmPath) {
+    [Environment]::SetEnvironmentVariable("LIBCLANG_PATH", $llvmPath, "Machine")
+    Write-Host "[+] Set LIBCLANG_PATH to $llvmPath" -ForegroundColor Green
+}
 
 # 3. Download & Install Analysis Tools function
 function Install-AnalysisTool {

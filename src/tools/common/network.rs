@@ -5,19 +5,25 @@ use crate::tools::Tool;
 use async_trait::async_trait;
 use serde_json::Value;
 
+/// Default network interface based on platform
+#[cfg(windows)]
+const DEFAULT_INTERFACE: &str = "Ethernet";
+#[cfg(not(windows))]
+const DEFAULT_INTERFACE: &str = "eth0";
+
 pub struct NetworkCapture;
 
 #[async_trait]
 impl Tool for NetworkCapture {
     fn name(&self) -> &str { "network_capture" }
     fn description(&self) -> &str { "Starts/Stops packet capture using Tshark. Args: action ('start'/'stop'), interface (string), output (string, optional)" }
-    
+
     async fn execute(&self, args: Value) -> Result<Value> {
         let action = args["action"].as_str().ok_or(anyhow::anyhow!("Missing action"))?;
-        
+
         match action {
             "start" => {
-                let interface = args["interface"].as_str().unwrap_or("eth0"); // Default interface or detect?
+                let interface = args["interface"].as_str().unwrap_or(DEFAULT_INTERFACE);
                 let output = args["output"].as_str().unwrap_or("capture.pcap");
                 
                 // Spawn Tshark

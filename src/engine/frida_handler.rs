@@ -1,5 +1,13 @@
 use anyhow::Result;
-use frida::{DeviceManager, RemoteDeviceOptions};
+use frida::{DeviceManager, Frida};
+use std::sync::OnceLock;
+
+// Global Frida instance for reuse
+static FRIDA: OnceLock<Frida> = OnceLock::new();
+
+fn get_frida() -> &'static Frida {
+    FRIDA.get_or_init(|| unsafe { Frida::obtain() })
+}
 
 pub struct FridaHandler;
 
@@ -10,7 +18,8 @@ impl FridaHandler {
 
     /// Spawns a process in suspended state, injects script, and resumes
     pub async fn spawn_and_instrument(&self, path: &str, script_content: &str) -> Result<u32> {
-        let device_manager = DeviceManager::new(frida::LocalDevice::new());
+        let frida = get_frida();
+        let device_manager = DeviceManager::obtain(frida);
         let device = device_manager.get_local_device()?;
         
         // 1. Spawn suspended
@@ -36,7 +45,8 @@ impl FridaHandler {
 
     /// Attaches to a running process
     pub async fn attach_process(&self, pid: u32) -> Result<u32> {
-        let device_manager = DeviceManager::new(frida::LocalDevice::new());
+        let frida = get_frida();
+        let device_manager = DeviceManager::obtain(frida);
         let device = device_manager.get_local_device()?;
         let _session = device.attach(pid)?;
         Ok(pid)
@@ -44,7 +54,8 @@ impl FridaHandler {
 
     /// Resumes a process
     pub async fn resume_process(&self, pid: u32) -> Result<()> {
-        let device_manager = DeviceManager::new(frida::LocalDevice::new());
+        let frida = get_frida();
+        let device_manager = DeviceManager::obtain(frida);
         let device = device_manager.get_local_device()?;
         device.resume(pid)?;
         Ok(())
@@ -52,16 +63,22 @@ impl FridaHandler {
 
     /// Injects an arbitrary JS script into an existing process
     pub async fn inject_script(&self, pid: u32, script_content: &str) -> Result<()> {
-         // Create local device manager
-         let device_manager = DeviceManager::new(frida::LocalDevice::new());
-         let device = device_manager.get_local_device()?;
-         let session = device.attach(pid)?;
-         
-         if !script_content.is_empty() {
-             let script = session.create_script(script_content, &mut frida::ScriptOption::default())?;
-             script.load()?;
-             tracing::info!("Injected custom script into PID {}", pid);
-         }
-         Ok(())
+         execute_script(pid, script_content)
     }
+}
+
+/// Standalone function to execute a Frida script on a process
+/// This is used by hook.rs, memory.rs and other tools
+pub fn execute_script(pid: u32, script_content: &str) -> Result<()> {
+    let frida = get_frida();
+    let device_manager = DeviceManager::obtain(frida);
+    let device = device_manager.get_local_device()?;
+    let session = device.attach(pid)?;
+
+    if !script_content.is_empty() {
+        let script = session.create_script(script_content, &mut frida::ScriptOption::default())?;
+        script.load()?;
+        tracing::info!("Executed script on PID {}", pid);
+    }
+    Ok(())
 }

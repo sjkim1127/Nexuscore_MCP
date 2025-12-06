@@ -71,6 +71,13 @@ impl NexusCoreServer {
         register!(tools::system::input_sim::InputSimulator);
         register!(tools::system::diff::SystemDiff);
 
+        // --- Phase 3: Detection & Intel Tools ---
+        register!(tools::malware::pe_sieve::PeSieve);
+        register!(tools::malware::doc_analyzer::DocAnalyzer);
+        register!(tools::malware::yara_gen::YaraGenerator);
+        register!(tools::intel::reputation::ReputationChecker);
+        register!(tools::system::eventlog::EventLogQuery);
+
         Self { tools }
     }
 }

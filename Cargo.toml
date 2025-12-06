@@ -36,6 +36,7 @@ rc4 = "0.1"               # Config extractor
 sha2 = "0.10"             # System diff (hashing)
 walkdir = "2.4"           # System diff (file walk)
 winapi = { version = "0.3", features = ["winuser"] } # Input simulation
+chrono = "0.4"            # YARA generator timestamps
 
 [dev-dependencies]
 mockito = "1.1.0"

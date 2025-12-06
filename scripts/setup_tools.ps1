@@ -5,8 +5,8 @@
 .DESCRIPTION
     Automates the setup of a malware analysis environment on Windows.
     1. Installs Chocolatey (Package Manager).
-    2. Installs base dependencies (Git, Python, 7zip, bandizip).
-    3. Downloads and configures specific analysis tools (DIE, Capa, Sysinternals).
+    2. Installs base dependencies (Git, Python, Rust, LLVM, etc.).
+    3. Downloads and configures specific analysis tools (DIE, Capa, PE-Sieve, Sysmon).
     4. Sets up PATH environment variables.
 
 .NOTES
@@ -33,8 +33,6 @@ else {
 
 # 2. Install Base Utilities & Development Tools via Chocolatey
 Write-Host "[*] Installing base utilities & Dev Tools..." -ForegroundColor Cyan
-# visualcpp-build-tools is required for Rust linker (link.exe)
-# llvm is required for frida-sys bindgen (libclang)
 choco install -y git python 7zip.install wireshark rust visualcpp-build-tools llvm
 
 # Set LIBCLANG_PATH for frida-sys
@@ -69,11 +67,10 @@ function Install-AnalysisTool {
     return $extractPath
 }
 
-# --- Sysinternals ---
+# --- Sysinternals Suite ---
 Install-AnalysisTool "https://download.sysinternals.com/files/SysinternalsSuite.zip" "Sysinternals.zip" "Sysinternals"
 
 # --- Detect It Easy (DIE) ---
-# Direct link to v3.09 example
 $dieUrl = "https://github.com/horsicq/DIE-engine/releases/download/3.09/die_win64_portable_3.09.zip"
 Install-AnalysisTool $dieUrl "die.zip" "DetectItEasy"
 
@@ -85,21 +82,61 @@ Install-AnalysisTool $capaUrl "capa.zip" "Capa"
 $flossUrl = "https://github.com/mandiant/flare-floss/releases/download/v3.0.1/floss-v3.0.1-windows.zip"
 Install-AnalysisTool $flossUrl "floss.zip" "Floss"
 
+# --- PE-Sieve (Injection Detection) ---
+$pesieveUrl = "https://github.com/hasherezade/pe-sieve/releases/download/v0.3.9/pe-sieve64.zip"
+Install-AnalysisTool $pesieveUrl "pesieve.zip" "PE-Sieve"
+
+# --- Sysmon (Windows Event Logging) ---
+Write-Host "[*] Checking Sysmon..." -ForegroundColor Cyan
+$sysmonExe = Join-Path $toolsDir "Sysinternals\Sysmon64.exe"
+if (Test-Path $sysmonExe) {
+    # Check if Sysmon service is installed
+    $sysmonService = Get-Service -Name "Sysmon64" -ErrorAction SilentlyContinue
+    if (-not $sysmonService) {
+        Write-Host "[*] Installing Sysmon with default config..." -ForegroundColor Yellow
+        # Download default config
+        $configUrl = "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml"
+        $configPath = Join-Path $toolsDir "sysmon-config.xml"
+        Invoke-WebRequest -Uri $configUrl -OutFile $configPath
+        
+        # Install Sysmon
+        Start-Process -FilePath $sysmonExe -ArgumentList "-accepteula -i $configPath" -Wait -NoNewWindow
+        Write-Host "[+] Sysmon installed and running." -ForegroundColor Green
+    }
+    else {
+        Write-Host "[+] Sysmon is already installed." -ForegroundColor Green
+    }
+}
+else {
+    Write-Host "[!] Sysmon64.exe not found in Sysinternals folder." -ForegroundColor Red
+}
+
 # 4. Update PATH
 $envPath = [Environment]::GetEnvironmentVariable("Path", "Machine")
 $newPaths = @(
     (Join-Path $toolsDir "Sysinternals"),
     (Join-Path $toolsDir "DetectItEasy"),
     (Join-Path $toolsDir "Capa"),
-    (Join-Path $toolsDir "Floss")
+    (Join-Path $toolsDir "Floss"),
+    (Join-Path $toolsDir "PE-Sieve")
 )
 
 foreach ($p in $newPaths) {
     if ($envPath -notlike "*$p*") {
         Write-Host "[*] Adding to PATH: $p" -ForegroundColor Cyan
         [Environment]::SetEnvironmentVariable("Path", "$envPath;$p", "Machine")
+        $envPath = "$envPath;$p"
     }
 }
 
 Write-Host "`n[SUCCESS] Environment Setup Complete!" -ForegroundColor Green
 Write-Host "Please restart your terminal to apply PATH changes."
+
+# Show setup summary
+Write-Host "`n--- Installed Tools ---" -ForegroundColor Yellow
+Write-Host "  - Sysinternals (handle.exe, procmon.exe, Sysmon64.exe)"
+Write-Host "  - Detect It Easy (diec.exe)"
+Write-Host "  - Capa (capa.exe)"
+Write-Host "  - Floss (floss.exe)"
+Write-Host "  - PE-Sieve (pe-sieve64.exe)"
+Write-Host "  - Sysmon (Event Logging)"

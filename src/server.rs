@@ -1,38 +1,34 @@
 use anyhow::Result;
-use async_trait::async_trait;
-use rmcp::{
-    protocol::{CallToolRequest, CallToolResult, Tool as McpToolDefinition, ListToolsResult},
-    RequestHandler,
-};
-use std::collections::HashMap;
+use rmcp::{ServerHandler, ServiceExt, model::*, service::RequestContext, tool};
 use serde_json::Value;
-
-// Internal Tool Trait imports
-use crate::tools::{self, Tool};
+use std::collections::HashMap;
+use crate::tools::Tool;
+use crate::tools;
+use std::sync::Arc;
+use async_trait::async_trait;
 
 pub struct NexusCoreServer {
-    tools: HashMap<String, Box<dyn Tool>>,
+    tools: HashMap<String, Arc<dyn Tool>>,
+}
+
+macro_rules! register {
+    ($t:expr) => {{
+        let tool: Arc<dyn Tool> = Arc::new($t);
+        tools.insert(tool.name().to_string(), tool);
+    }};
 }
 
 impl NexusCoreServer {
     pub fn new() -> Self {
-        let mut tools: HashMap<String, Box<dyn Tool>> = HashMap::new();
-        
-        // Helper macro to register tools
-        macro_rules! register {
-            ($t:expr) => {
-                let tool = $t;
-                tools.insert(tool.name().to_string(), Box::new(tool));
-            };
-        }
+        let mut tools: HashMap<String, Arc<dyn Tool>> = HashMap::new();
 
         // --- Common Tools ---
         register!(tools::common::process::SpawnProcess);
         register!(tools::common::process::AttachProcess);
         register!(tools::common::process::ResumeProcess);
-        register!(tools::common::process::InjectFridaScript); // New dynamic scripting tool
+        register!(tools::common::process::InjectFridaScript);
         
-        // --- Frida Session Management (Persistent Sessions) ---
+        // --- Frida Session Management ---
         register!(tools::common::frida_session::FridaSessionCreate);
         register!(tools::common::frida_session::FridaSessionInject);
         register!(tools::common::frida_session::FridaSessionResume);
@@ -40,70 +36,79 @@ impl NexusCoreServer {
         register!(tools::common::frida_session::FridaSessionDestroy);
         register!(tools::common::frida_session::FridaSessionList);
         
-        // ... add other tools here ...
-        register!(tools::malware::disasm::CodeDisassembler);
-        register!(tools::malware::reconstruction::PeFixer);
-        register!(tools::malware::iat::IatFixer);
-        register!(tools::malware::unpacker::OepFinder);
-        register!(tools::malware::sandbox_submit::CapeSubmitter);
-        register!(tools::system::persistence::PersistenceHunter);
-        register!(tools::system::handles::HandleScanner);
+        // --- Frida Tools (malware::frida) ---
+        register!(tools::malware::frida::api_monitor::ApiMonitor);
+        register!(tools::malware::frida::api_monitor::FileMonitor);
+        register!(tools::malware::frida::api_monitor::RegistryMonitor);
+        register!(tools::malware::frida::api_monitor::NetworkMonitor);
+        register!(tools::malware::frida::api_monitor::InjectionMonitor);
+        register!(tools::malware::frida::memory_dump::MemoryDumper);
+        register!(tools::malware::frida::memory_dump::MemoryPatcher);
+        register!(tools::malware::frida::stalker::ExecutionStalker);
+        register!(tools::malware::frida::string_sniffer::StringSniffer);
+        register!(tools::malware::frida::crypto_hook::CryptoHook);
+        register!(tools::malware::frida::ssl_keylog::SslKeylogger);
+        register!(tools::malware::frida::ssl_dumper::SslKeyDumper);
+        register!(tools::malware::frida::time_warp::TimeWarper);
+        register!(tools::malware::frida::child_trapper::ChildTrapper);
+        register!(tools::malware::frida::spoof_return::ReturnSpoofer);
+        register!(tools::malware::frida::spoof_return::AddressSpoofer);
+        register!(tools::malware::frida::callstack::CallstackTracer);
+        register!(tools::malware::frida::callstack::AddressTracer);
         
-        // Note: Wrappers (Die, Capa, Yara) need to be registered too, assuming they impl Tool
+        // --- Analysis Tools (malware::analysis) ---
+        register!(tools::malware::analysis::disasm::CodeDisassembler);
+        register!(tools::malware::analysis::reconstruction::PeFixer);
+        register!(tools::malware::analysis::iat::IatFixer);
+        register!(tools::malware::analysis::unpacker::OepFinder);
+        register!(tools::malware::analysis::shellcode_emu::ShellcodeEmulator);
+        register!(tools::malware::analysis::config_extractor::ConfigExtractor);
+        register!(tools::malware::analysis::pe_sieve::PeSieve);
+        register!(tools::malware::analysis::doc_analyzer::DocAnalyzer);
+        register!(tools::malware::analysis::yara_gen::YaraGenerator);
+        
+        // --- Debug Tools (malware::debug) ---
+        register!(tools::malware::debug::debugger::SessionStart);
+        register!(tools::malware::debug::debugger::SessionCommand);
+        register!(tools::malware::debug::debugger::SessionBatch);
+        register!(tools::malware::debug::debugger::SessionEnd);
+        register!(tools::malware::debug::debugger::SessionList);
+        register!(tools::malware::debug::debugger::CdbCommands);
+        
+        // --- Malware Root Level ---
+        register!(tools::malware::sandbox_submit::CapeSubmitter);
         register!(tools::malware::wrappers::external::DieTool);
         register!(tools::malware::wrappers::external::CapaTool);
         register!(tools::malware::wrappers::external::FlossTool);
-        // register!(tools::malware::yara::YaraScanner); // If available
-
-        // --- API Monitoring Tools ---
-        register!(tools::malware::api_monitor::ApiMonitor);
-        register!(tools::malware::api_monitor::FileMonitor);
-        register!(tools::malware::api_monitor::RegistryMonitor);
-        register!(tools::malware::api_monitor::NetworkMonitor);
-        register!(tools::malware::api_monitor::InjectionMonitor);
-
-        // --- Advanced Frida Tools ---
-        register!(tools::malware::memory_dump::MemoryDumper);
-        register!(tools::malware::memory_dump::MemoryPatcher);
-        register!(tools::malware::string_sniffer::StringSniffer);
-        register!(tools::malware::crypto_hook::CryptoHook);
-        register!(tools::malware::ssl_keylog::SslKeylogger);
-        register!(tools::malware::spoof_return::ReturnSpoofer);
-        register!(tools::malware::spoof_return::AddressSpoofer);
-        register!(tools::malware::callstack::CallstackTracer);
-        register!(tools::malware::callstack::AddressTracer);
-
-        // --- Phase 2: Advanced Analysis Tools ---
-        register!(tools::malware::shellcode_emu::ShellcodeEmulator);
-        register!(tools::malware::config_extractor::ConfigExtractor);
-        register!(tools::network::fakenet::FakeNet);
+        
+        // --- System Tools ---
+        register!(tools::system::persistence::PersistenceHunter);
+        register!(tools::system::handles::HandleScanner);
         register!(tools::system::input_sim::InputSimulator);
         register!(tools::system::diff::SystemDiff);
-
-        // --- Phase 3: Detection & Intel Tools ---
-        register!(tools::malware::pe_sieve::PeSieve);
-        register!(tools::malware::doc_analyzer::DocAnalyzer);
-        register!(tools::malware::yara_gen::YaraGenerator);
-        register!(tools::intel::reputation::ReputationChecker);
-        register!(tools::system::eventlog::EventLogQuery);
-
-        // --- Phase 4: Advanced Runtime Manipulation ---
-        register!(tools::malware::stalker::ExecutionStalker);
-        register!(tools::malware::ssl_dumper::SslKeyDumper);
-        register!(tools::malware::time_warp::TimeWarper);
-        register!(tools::malware::child_trapper::ChildTrapper);
         register!(tools::system::gui_spy::GuiSpy);
-
-        // --- Phase 5: Debugger Integration (Session-Based, Headless cdb.exe) ---
-        register!(tools::malware::debugger::SessionStart);
-        register!(tools::malware::debugger::SessionCommand);
-        register!(tools::malware::debugger::SessionBatch);
-        register!(tools::malware::debugger::SessionEnd);
-        register!(tools::malware::debugger::SessionList);
-        register!(tools::malware::debugger::CdbCommands);
+        register!(tools::system::eventlog::EventLogQuery);
+        
+        // --- Network Tools ---
+        register!(tools::network::fakenet::FakeNet);
+        
+        // --- Intel Tools ---
+        register!(tools::intel::reputation::ReputationChecker);
 
         Self { tools }
     }
+
+    pub fn print_tool_count(&self) {
+        tracing::info!("NexusCore loaded {} tools", self.tools.len());
+    }
+}
+
+// MCP Definition for tool listing
+#[derive(Clone)]
+struct McpToolDefinition {
+    name: String,
+    description: Option<String>,
+    input_schema: Value,
 }
 
 #[async_trait]
@@ -112,46 +117,35 @@ impl RequestHandler for NexusCoreServer {
         let tools_list: Vec<McpToolDefinition> = self.tools.values().map(|t| McpToolDefinition {
             name: t.name().to_string(),
             description: Some(t.description().to_string()),
-            input_schema: t.schema().to_json(), // Now uses actual tool schema
+            input_schema: t.schema().to_json(),
         }).collect();
 
         Ok(ListToolsResult { tools: tools_list, next_cursor: None })
     }
 
-    async fn call_tool(&self, req: CallToolRequest) -> Result<CallToolResult> {
-        let name = req.name;
-        match self.tools.get(&name) {
-            Some(tool) => {
-                let args = req.arguments.unwrap_or(serde_json::json!({}));
-                match tool.execute(args).await {
-                    Ok(result) => {
-                        // RMCP expects a list of Content (Text/Image/Resource)
-                        // our tools return Value. We convert Value -> Text Content.
-                        let text = serde_json::to_string_pretty(&result)?;
-                        Ok(CallToolResult {
-                            content: vec![rmcp::protocol::Content::Text(rmcp::protocol::TextContent {
-                                text,
-                                ..Default::default()
-                            })],
-                            is_error: Some(false),
-                            meta: None // _meta field
-                        })
-                    },
-                    Err(e) => {
-                        Ok(CallToolResult {
-                            content: vec![rmcp::protocol::Content::Text(rmcp::protocol::TextContent {
-                                text: format!("Error executing {}: {}", name, e),
-                                ..Default::default()
-                            })],
-                            is_error: Some(true),
-                            meta: None
-                        })
-                    }
-                }
-            },
-            None => Err(anyhow::anyhow!("Tool not found: {}", name)),
+    async fn call_tool(&self, name: String, args: Value) -> Result<CallToolResult> {
+        let tool = self.tools.get(&name).ok_or_else(|| anyhow::anyhow!("Unknown tool: {}", name))?;
+        
+        match tool.execute(args).await {
+            Ok(result) => Ok(CallToolResult {
+                content: vec![Content::text(result.to_string())],
+                is_error: Some(false),
+            }),
+            Err(e) => Ok(CallToolResult {
+                content: vec![Content::text(format!("Error: {}", e))],
+                is_error: Some(true),
+            }),
         }
     }
+}
+
+/// Start the MCP server
+pub async fn run_server() -> Result<()> {
+    tracing_subscriber::fmt::init();
+    let server = NexusCoreServer::new();
+    server.print_tool_count();
     
-    // Other handler methods (resources, prompts) can be defaulted or implemented as empty
+    let service = server.serve(stdio()).await?;
+    service.waiting().await?;
+    Ok(())
 }

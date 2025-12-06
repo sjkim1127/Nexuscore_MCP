@@ -78,6 +78,13 @@ impl NexusCoreServer {
         register!(tools::intel::reputation::ReputationChecker);
         register!(tools::system::eventlog::EventLogQuery);
 
+        // --- Phase 4: Advanced Runtime Manipulation ---
+        register!(tools::malware::stalker::ExecutionStalker);
+        register!(tools::malware::ssl_dumper::SslKeyDumper);
+        register!(tools::malware::time_warp::TimeWarper);
+        register!(tools::malware::child_trapper::ChildTrapper);
+        register!(tools::system::gui_spy::GuiSpy);
+
         Self { tools }
     }
 }

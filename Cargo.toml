@@ -35,7 +35,7 @@ cbc = "0.1"               # AES CBC mode
 rc4 = "0.1"               # Config extractor
 sha2 = "0.10"             # System diff (hashing)
 walkdir = "2.4"           # System diff (file walk)
-winapi = { version = "0.3", features = ["winuser"] } # Input simulation
+winapi = { version = "0.3", features = ["winuser", "libloaderapi"] } # Input sim + GUI spy
 chrono = "0.4"            # YARA generator timestamps
 
 [dev-dependencies]

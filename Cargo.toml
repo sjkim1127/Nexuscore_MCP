@@ -24,7 +24,7 @@ goblin = "0.10.4"
 hex = "0.4.3"
 
 # MCP Protocol
-rmcp = { version = "0.10.0", features = ["server"] }
+rmcp = { version = "0.11.0", features = ["server"] }
 schemars = "1.1.0"
 
 # Phase 2: Advanced Tools

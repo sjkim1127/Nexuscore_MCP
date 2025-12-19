@@ -16,7 +16,7 @@ dotenv = "0.15.0"
 winreg = "0.10"
 
 # Security & Analysis
-yara = { version = "0.26", features = ["bundled-4_5_0"] } 
+yara = { version = "0.27", features = ["bundled-4_5_0"] } 
 frida = "0.17.0"
 capstone = "0.13"
 iced-x86 = "1.21.0"

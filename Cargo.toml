@@ -29,7 +29,7 @@ schemars = "1.1.0"
 
 # Phase 2: Advanced Tools
 unicorn-engine = "2.0"    # Shellcode emulation
-base64 = "0.21"           # Config extractor
+base64 = "0.22"           # Config extractor
 aes = "0.8"               # Config extractor
 cbc = "0.1"               # AES CBC mode
 rc4 = "0.1"               # Config extractor

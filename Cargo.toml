@@ -37,7 +37,7 @@ sha2 = "0.10"             # System diff (hashing)
 walkdir = "2.4"           # System diff (file walk)
 winapi = { version = "0.3", features = ["winuser", "libloaderapi"] } # Input sim + GUI spy
 chrono = "0.4"            # YARA generator timestamps
-which = "5.0"             # x64dbg path detection
+which = "8.0"             # x64dbg path detection
 
 [dev-dependencies]
 mockito = "1.1.0"

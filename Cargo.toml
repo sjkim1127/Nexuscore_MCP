@@ -25,7 +25,7 @@ hex = "0.4.3"
 
 # MCP Protocol
 rmcp = { version = "0.11.0", features = ["server"] }
-schemars = "1.1.0"
+schemars = "1.2.0"
 
 # Phase 2: Advanced Tools
 unicorn-engine = "2.0"    # Shellcode emulation

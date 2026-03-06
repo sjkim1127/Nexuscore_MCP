@@ -24,6 +24,34 @@ jobs:
       shell: powershell
       run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
+    # 1.5. Install Analysis Tools (DIE, CAPA, etc.)
+    - name: Install Analysis Tools
+      shell: powershell
+      run: |
+        # Run the setup script but skip the interactive/heavy parts if possible
+        # Since we are in CI, we just want the binaries
+        .\scripts\setup_tools.ps1
+        
+        # Add tool directories to GITHUB_PATH for subsequent steps
+        $toolsDir = Resolve-Path "bin"
+        echo "$toolsDir\Sysinternals" >> $env:GITHUB_PATH
+        echo "$toolsDir\DetectItEasy" >> $env:GITHUB_PATH
+        echo "$toolsDir\Capa" >> $env:GITHUB_PATH
+        echo "$toolsDir\Floss" >> $env:GITHUB_PATH
+        echo "$toolsDir\PE-Sieve" >> $env:GITHUB_PATH
+
+    - name: Verify Tools
+      shell: powershell
+      run: |
+        Write-Host "Verifying tool installations..."
+        # diec might return non-zero for help/version without args, using a check for existence if needed, but --version is usually fine
+        diec --version
+        capa --version
+        floss --version
+        pe-sieve64.exe /help
+        handle.exe -accepteula /?
+        Write-Host "All tools verified successfully."
+
     # 2. Setup Frida DevKit
     - name: Setup Frida DevKit
       shell: powershell

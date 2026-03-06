@@ -1,25 +1,34 @@
-use anyhow::Result;
-use serde_json::Value;
 use crate::engine::frida_handler;
 use crate::tools::Tool;
+use anyhow::Result;
 use async_trait::async_trait;
+use serde_json::Value;
 
 pub struct ReadMemory;
 #[async_trait]
 impl Tool for ReadMemory {
-    fn name(&self) -> &str { "read_memory" }
-    fn description(&self) -> &str { "Reads memory from a process. Args: pid (number), address (string), size (number, optional)" }
+    fn name(&self) -> &str {
+        "read_memory"
+    }
+    fn description(&self) -> &str {
+        "Reads memory from a process. Args: pid (number), address (string), size (number, optional)"
+    }
     async fn execute(&self, args: Value) -> Result<Value> {
         let pid = args["pid"].as_u64().ok_or(anyhow::anyhow!("Missing pid"))? as u32;
-        let address = args["address"].as_str().ok_or(anyhow::anyhow!("Missing address"))?;
+        let address = args["address"]
+            .as_str()
+            .ok_or(anyhow::anyhow!("Missing address"))?;
         let size = args["size"].as_u64().unwrap_or(256);
 
         // Frida script to read memory
-        let script = format!(r#"
+        let script = format!(
+            r#"
             var ptr = ptr("{}");
             var buf = Memory.readByteArray(ptr, {});
             send({{ "type": "memory_read", "data": buf }});
-        "#, address, size);
+        "#,
+            address, size
+        );
 
         frida_handler::execute_script(pid, &script)?;
         Ok(serde_json::json!({ "status": "reading", "pid": pid, "address": address }))
@@ -29,13 +38,20 @@ impl Tool for ReadMemory {
 pub struct SearchMemory;
 #[async_trait]
 impl Tool for SearchMemory {
-    fn name(&self) -> &str { "search_memory" }
-    fn description(&self) -> &str { "Searches memory for a pattern. Args: pid (number), pattern (string)" }
+    fn name(&self) -> &str {
+        "search_memory"
+    }
+    fn description(&self) -> &str {
+        "Searches memory for a pattern. Args: pid (number), pattern (string)"
+    }
     async fn execute(&self, args: Value) -> Result<Value> {
         let pid = args["pid"].as_u64().ok_or(anyhow::anyhow!("Missing pid"))? as u32;
-        let pattern = args["pattern"].as_str().ok_or(anyhow::anyhow!("Missing pattern"))?;
-        
-        let script = format!(r#"
+        let pattern = args["pattern"]
+            .as_str()
+            .ok_or(anyhow::anyhow!("Missing pattern"))?;
+
+        let script = format!(
+            r#"
             var ranges = Process.enumerateRanges('rw-');
             var results = [];
             ranges.forEach(function(range) {{
@@ -47,10 +63,12 @@ impl Tool for SearchMemory {
                 }} catch (e) {{}}
             }});
             send({{ "type": "scan_result", "matches": results }});
-        "#, pattern);
+        "#,
+            pattern
+        );
 
         frida_handler::execute_script(pid, &script)?;
-        
+
         Ok(serde_json::json!({ "status": "scanning", "pid": pid }))
     }
 }

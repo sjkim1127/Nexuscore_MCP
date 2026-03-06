@@ -1,8 +1,8 @@
 use anyhow::Result;
-use frida::{DeviceManager, Frida, Session, Script};
+use frida::{DeviceManager, Frida, Script, Session};
 use std::collections::HashMap;
-use std::sync::{Mutex, Arc};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 // Global Frida instance for reuse
@@ -13,7 +13,8 @@ fn get_frida() -> &'static Frida {
 }
 
 /// Frida Session Manager - Keeps sessions alive between tool calls
-static SESSION_MANAGER: std::sync::OnceLock<Mutex<FridaSessionManager>> = std::sync::OnceLock::new();
+static SESSION_MANAGER: std::sync::OnceLock<Mutex<FridaSessionManager>> =
+    std::sync::OnceLock::new();
 
 pub fn get_session_manager() -> &'static Mutex<FridaSessionManager> {
     SESSION_MANAGER.get_or_init(|| Mutex::new(FridaSessionManager::new()))
@@ -22,7 +23,7 @@ pub fn get_session_manager() -> &'static Mutex<FridaSessionManager> {
 /// Stored session with message receiver
 struct FridaSession {
     pid: u32,
-    session_handle: u64,  // We store the raw handle since Session isn't Send
+    session_handle: u64, // We store the raw handle since Session isn't Send
     message_rx: Receiver<String>,
     active: bool,
 }
@@ -68,14 +69,17 @@ impl FridaSessionManager {
 
         // Create message channel
         let (tx, rx) = channel::<String>();
-        
+
         // Store session
-        self.sessions.insert(session_id.clone(), FridaSession {
-            pid: target_pid,
-            session_handle,
-            message_rx: rx,
-            active: true,
-        });
+        self.sessions.insert(
+            session_id.clone(),
+            FridaSession {
+                pid: target_pid,
+                session_handle,
+                message_rx: rx,
+                active: true,
+            },
+        );
 
         self.message_buffer.insert(session_id.clone(), Vec::new());
 
@@ -88,25 +92,35 @@ impl FridaSessionManager {
 
     /// Inject script into existing session
     pub fn inject_script(&mut self, session_id: &str, script_content: &str) -> Result<()> {
-        let session = self.sessions.get(session_id)
+        let session = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
         if !session.active {
-            return Err(anyhow::anyhow!("Session {} is no longer active", session_id));
+            return Err(anyhow::anyhow!(
+                "Session {} is no longer active",
+                session_id
+            ));
         }
 
         let frida = get_frida();
         let device_manager = DeviceManager::obtain(frida);
         let device = device_manager.get_local_device()?;
-        
+
         // Re-attach to get session reference
         let frida_session = device.attach(session.pid)?;
-        
+
         // Create and load script
-        let script = frida_session.create_script(script_content, &mut frida::ScriptOption::default())?;
+        let script =
+            frida_session.create_script(script_content, &mut frida::ScriptOption::default())?;
         script.load()?;
 
-        tracing::info!("Injected script into session {} (PID {})", session_id, session.pid);
+        tracing::info!(
+            "Injected script into session {} (PID {})",
+            session_id,
+            session.pid
+        );
 
         // Keep script loaded by not dropping
         std::mem::forget(script);
@@ -117,7 +131,9 @@ impl FridaSessionManager {
 
     /// Resume a spawned process
     pub fn resume_process(&self, session_id: &str) -> Result<()> {
-        let session = self.sessions.get(session_id)
+        let session = self
+            .sessions
+            .get(session_id)
             .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
         let frida = get_frida();
@@ -163,7 +179,8 @@ impl FridaSessionManager {
 
     /// List all active sessions
     pub fn list_sessions(&self) -> Vec<(String, u32, bool)> {
-        self.sessions.iter()
+        self.sessions
+            .iter()
             .map(|(id, s)| (id.clone(), s.pid, s.active))
             .collect()
     }
@@ -188,14 +205,16 @@ impl FridaHandler {
     pub async fn spawn_and_instrument(&self, path: &str, script_content: &str) -> Result<u32> {
         let mut manager = get_session_manager().lock().unwrap();
         let session_id = manager.create_session(None, Some(path))?;
-        
+
         if !script_content.is_empty() {
             manager.inject_script(&session_id, script_content)?;
         }
-        
+
         manager.resume_process(&session_id)?;
-        
-        manager.get_pid(&session_id).ok_or_else(|| anyhow::anyhow!("Failed to get PID"))
+
+        manager
+            .get_pid(&session_id)
+            .ok_or_else(|| anyhow::anyhow!("Failed to get PID"))
     }
 
     pub async fn attach_process(&self, pid: u32) -> Result<u32> {
@@ -215,13 +234,14 @@ impl FridaHandler {
     pub async fn inject_script(&self, pid: u32, script_content: &str) -> Result<()> {
         // Find session by PID or create new one
         let mut manager = get_session_manager().lock().unwrap();
-        
+
         // Check if we already have a session for this PID
         let session_id = {
-            let existing = manager.list_sessions()
+            let existing = manager
+                .list_sessions()
                 .into_iter()
                 .find(|(_, p, active)| *p == pid && *active);
-            
+
             if let Some((id, _, _)) = existing {
                 id
             } else {
@@ -236,13 +256,14 @@ impl FridaHandler {
 /// Standalone function to execute a Frida script on a process (maintains session)
 pub fn execute_script(pid: u32, script_content: &str) -> Result<()> {
     let mut manager = get_session_manager().lock().unwrap();
-    
+
     // Find or create session
     let session_id = {
-        let existing = manager.list_sessions()
+        let existing = manager
+            .list_sessions()
             .into_iter()
             .find(|(_, p, active)| *p == pid && *active);
-        
+
         if let Some((id, _, _)) = existing {
             id
         } else {
@@ -257,12 +278,13 @@ pub fn execute_script(pid: u32, script_content: &str) -> Result<()> {
 /// Execute script and return session ID (for tools that need to track sessions)
 pub fn execute_script_with_session(pid: u32, script_content: &str) -> Result<String> {
     let mut manager = get_session_manager().lock().unwrap();
-    
+
     let session_id = {
-        let existing = manager.list_sessions()
+        let existing = manager
+            .list_sessions()
             .into_iter()
             .find(|(_, p, active)| *p == pid && *active);
-        
+
         if let Some((id, _, _)) = existing {
             id
         } else {

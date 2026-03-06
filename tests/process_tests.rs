@@ -1,4 +1,4 @@
-use nexuscore_mcp::tools::common::process::{SpawnProcess, AttachProcess, ResumeProcess};
+use nexuscore_mcp::tools::common::process::{AttachProcess, ResumeProcess, SpawnProcess};
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
 

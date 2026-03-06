@@ -1,20 +1,27 @@
-use anyhow::Result;
-use serde_json::Value;
 use crate::engine::frida_handler;
 use crate::tools::Tool;
+use anyhow::Result;
 use async_trait::async_trait;
+use serde_json::Value;
 
 pub struct InstallHook;
 #[async_trait]
 impl Tool for InstallHook {
-    fn name(&self) -> &str { "install_hook" }
-    fn description(&self) -> &str { "Installs a JS hook on a target function. Args: pid (number), target (string), js_code (string, optional)" }
+    fn name(&self) -> &str {
+        "install_hook"
+    }
+    fn description(&self) -> &str {
+        "Installs a JS hook on a target function. Args: pid (number), target (string), js_code (string, optional)"
+    }
     async fn execute(&self, args: Value) -> Result<Value> {
         let pid = args["pid"].as_u64().ok_or(anyhow::anyhow!("Missing pid"))? as u32;
-        let target = args["target"].as_str().ok_or(anyhow::anyhow!("Missing target function/address"))?;
-        let code = args["js_code"].as_str().unwrap_or(""); 
+        let target = args["target"]
+            .as_str()
+            .ok_or(anyhow::anyhow!("Missing target function/address"))?;
+        let code = args["js_code"].as_str().unwrap_or("");
 
-        let script = format!(r#"
+        let script = format!(
+            r#"
             var target = Module.findExportByName(null, "{}");
             if (!target) target = ptr("{}");
             
@@ -27,7 +34,9 @@ impl Tool for InstallHook {
                     send({{ "type": "hook_leave", "retval": retval }});
                 }}
             }});
-        "#, target, target, target, code);
+        "#,
+            target, target, target, code
+        );
 
         frida_handler::execute_script(pid, &script)?;
 

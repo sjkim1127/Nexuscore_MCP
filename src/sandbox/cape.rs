@@ -1,5 +1,5 @@
-use anyhow::{Result, Context, bail};
-use reqwest::{Client, multipart};
+use anyhow::{bail, Context, Result};
+use reqwest::{multipart, Client};
 use serde_json::Value;
 use std::path::Path;
 use std::time::Duration;
@@ -25,12 +25,14 @@ impl CapeClient {
     /// 1. Submit malware file
     pub async fn submit_file(&self, file_path: &str, machine: Option<&str>) -> Result<u64> {
         let path = Path::new(file_path);
-        let filename = path.file_name()
+        let filename = path
+            .file_name()
             .context("Invalid filename")?
             .to_string_lossy()
             .into_owned();
 
-        let content = fs::read(path).await
+        let content = fs::read(path)
+            .await
             .context(format!("Failed to read file: {}", file_path))?;
 
         // Multipart Form
@@ -44,7 +46,9 @@ impl CapeClient {
 
         // CAPEv2 API Call
         let url = format!("{}/tasks/create/file/", self.base_url);
-        let resp = self.client.post(&url)
+        let resp = self
+            .client
+            .post(&url)
             // .header("Authorization", format!("Token {}", self.api_token)) // Uncomment if needed
             .multipart(form)
             .send()
@@ -58,8 +62,7 @@ impl CapeClient {
 
         // Extract Task ID
         let json: Value = resp.json().await?;
-        let task_id = json["task_id"].as_u64()
-            .context("No task_id in response")?;
+        let task_id = json["task_id"].as_u64().context("No task_id in response")?;
 
         Ok(task_id)
     }
@@ -98,7 +101,7 @@ impl CapeClient {
     pub async fn get_report(&self, task_id: u64) -> Result<Value> {
         let url = format!("{}/tasks/report/{}/", self.base_url, task_id);
         let resp = self.client.get(&url).send().await?;
-        
+
         let report: Value = resp.json().await?;
         Ok(report)
     }

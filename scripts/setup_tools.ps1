@@ -38,8 +38,48 @@ choco install -y git python 7zip.install wireshark rust visualcpp-build-tools ll
 # Set LIBCLANG_PATH for frida-sys
 $llvmPath = "C:\Program Files\LLVM\bin"
 if (Test-Path $llvmPath) {
-    [Environment]::SetEnvironmentVariable("LIBCLANG_PATH", $llvmPath, "Machine")
+    [Environment]::SetEnvironmentVariable("LIBCLANG_PATH", $llvmPath, "User")
+    $env:LIBCLANG_PATH = $llvmPath
     Write-Host "[+] Set LIBCLANG_PATH to $llvmPath" -ForegroundColor Green
+}
+
+# --- Frida DevKit Setup ---
+Write-Host "[*] Setting up Frida DevKit..." -ForegroundColor Cyan
+$fridaVersion = "16.5.11"
+$fridaUrl = "https://github.com/frida/frida/releases/download/$fridaVersion/frida-core-devkit-$fridaVersion-windows-x86_64.tar.xz"
+$fridaZip = Join-Path $toolsDir "frida-devkit.tar.xz"
+$fridaDir = Join-Path $toolsDir "FridaDevKit"
+
+if (-not (Test-Path $fridaDir)) {
+    New-Item -ItemType Directory -Path $fridaDir -Force | Out-Null
+    Write-Host "[*] Downloading Frida DevKit v$fridaVersion..." -ForegroundColor Yellow
+    Invoke-WebRequest -Uri $fridaUrl -OutFile $fridaZip
+    
+    Write-Host "[*] Extracting Frida DevKit..." -ForegroundColor Yellow
+    # Using 7z installed earlier via choco
+    & "C:\Program Files\7-Zip\7z.exe" x $fridaZip -o"$toolsDir" -y | Out-Null
+    $tarPath = $fridaZip.Replace(".xz", "")
+    & "C:\Program Files\7-Zip\7z.exe" x $tarPath -o"$fridaDir" -y | Out-Null
+    
+    Remove-Item $fridaZip -Force
+    Remove-Item $tarPath -Force
+}
+
+# Find the actual directory containing frida-core.h (might be in a subfolder depending on extraction)
+$devkitPath = Get-ChildItem -Path $fridaDir -Filter "frida-core.h" -Recurse | Select-Object -First 1 | ForEach-Object { $_.Directory.FullName }
+if ($devkitPath) {
+    [Environment]::SetEnvironmentVariable("FRIDA_CORE_DEVKIT", $devkitPath, "User")
+    $env:FRIDA_CORE_DEVKIT = $devkitPath
+    
+    # Also set BINDGEN_EXTRA_CLANG_ARGS for bindgen
+    $clangArg = "-I" + $devkitPath.Replace("\", "/")
+    [Environment]::SetEnvironmentVariable("BINDGEN_EXTRA_CLANG_ARGS", $clangArg, "User")
+    $env:BINDGEN_EXTRA_CLANG_ARGS = $clangArg
+    
+    Write-Host "[+] Frida DevKit configured at: $devkitPath" -ForegroundColor Green
+}
+else {
+    Write-Host "[!] Could not find frida-core.h in extracted Frida DevKit." -ForegroundColor Red
 }
 
 # 3. Download & Install Analysis Tools function

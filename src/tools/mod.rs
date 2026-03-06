@@ -3,24 +3,33 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 pub mod common;
-pub mod malware;
-pub mod wrappers;
-pub mod system;
-pub mod network;
 pub mod intel;
+pub mod malware;
+pub mod network;
+pub mod system;
 
 /// Parameter definition for tool schema
 #[derive(Clone, Debug)]
 pub struct ParamDef {
     pub name: &'static str,
-    pub param_type: &'static str,  // "string", "number", "boolean", "array", "object"
+    pub param_type: &'static str, // "string", "number", "boolean", "array", "object"
     pub required: bool,
     pub description: &'static str,
 }
 
 impl ParamDef {
-    pub const fn new(name: &'static str, param_type: &'static str, required: bool, description: &'static str) -> Self {
-        Self { name, param_type, required, description }
+    pub const fn new(
+        name: &'static str,
+        param_type: &'static str,
+        required: bool,
+        description: &'static str,
+    ) -> Self {
+        Self {
+            name,
+            param_type,
+            required,
+            description,
+        }
     }
 
     pub fn to_json(&self) -> Value {
@@ -52,16 +61,24 @@ impl ToolSchema {
         for param in &self.params {
             properties.insert(param.name.to_string(), param.to_json());
             if param.required {
-                required.push(param.name.to_string());
+                required.push(Value::String(param.name.to_string()));
             }
         }
 
-        serde_json::json!({
+        let mut schema = serde_json::json!({
             "type": "object",
             "properties": properties,
-            "required": required,
             "additionalProperties": false
-        })
+        });
+
+        if !required.is_empty() {
+            schema
+                .as_object_mut()
+                .expect("tool schema must be an object")
+                .insert("required".to_string(), Value::Array(required));
+        }
+
+        schema
     }
 }
 
@@ -69,12 +86,12 @@ impl ToolSchema {
 pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
     fn description(&self) -> &str;
-    
+
     /// Returns the input schema for this tool (default: empty schema)
     fn schema(&self) -> ToolSchema {
         ToolSchema::empty()
     }
-    
+
     async fn execute(&self, args: Value) -> Result<Value>;
 }
 

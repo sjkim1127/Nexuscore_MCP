@@ -1,19 +1,23 @@
-use anyhow::Result;
-use serde_json::Value;
 use crate::tools::Tool;
+use anyhow::Result;
 use async_trait::async_trait;
+use serde_json::Value;
 use tokio::process::Command;
 
 pub struct HandleScanner;
 
 #[async_trait]
 impl Tool for HandleScanner {
-    fn name(&self) -> &str { "scan_handles" }
-    fn description(&self) -> &str { "Scans open handles and mutexes of a process using Sysinternals handle.exe. Args: pid (number)" }
-    
+    fn name(&self) -> &str {
+        "scan_handles"
+    }
+    fn description(&self) -> &str {
+        "Scans open handles and mutexes of a process using Sysinternals handle.exe. Args: pid (number)"
+    }
+
     async fn execute(&self, args: Value) -> Result<Value> {
         let pid = args["pid"].as_u64().ok_or(anyhow::anyhow!("Missing pid"))?;
-        
+
         // Execute handle.exe -a (all types) -p <pid> -accepteula
         let output = Command::new("handle.exe")
             .arg("-a")
@@ -40,14 +44,16 @@ impl Tool for HandleScanner {
                 // Type           Pid User   Handle   Path
                 // File           123 User   4C       C:\Windows
                 // Mutex          123 User   50       \BaseNamedObjects\MyMutex
-                
+
                 for line in lines {
                     let parts: Vec<&str> = line.split_whitespace().collect();
                     if parts.len() >= 4 {
                         let obj_type = parts[0];
                         // Skip header
-                        if obj_type == "Type" || obj_type.starts_with("---") { continue; }
-                        
+                        if obj_type == "Type" || obj_type.starts_with("---") {
+                            continue;
+                        }
+
                         // Extract Name (Everything after the handle hex code)
                         // This logic is rough, handle.exe output is fixed width but varies.
                         // Let's grab the last part if it looks like a path or mutex name.
@@ -68,10 +74,11 @@ impl Tool for HandleScanner {
                     "handle_count": handles.len(),
                     "handles": handles
                 }))
-            },
-            Err(e) => {
-                Err(anyhow::anyhow!("Failed to run handle.exe. Is it in PATH? Error: {}", e))
             }
+            Err(e) => Err(anyhow::anyhow!(
+                "Failed to run handle.exe. Is it in PATH? Error: {}",
+                e
+            )),
         }
     }
 }

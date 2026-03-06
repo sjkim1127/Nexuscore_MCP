@@ -1,16 +1,20 @@
-use anyhow::Result;
-use serde_json::Value;
 use crate::tools::Tool;
+use anyhow::Result;
 use async_trait::async_trait;
-use tokio::net::{UdpSocket, TcpListener};
+use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, UdpSocket};
 
 pub struct FakeNet;
 
 #[async_trait]
 impl Tool for FakeNet {
-    fn name(&self) -> &str { "start_fakenet" }
-    fn description(&self) -> &str { "Starts FakeNet simulator (DNS Sinkhole + HTTP 200 OK). Args: http_port (default 80), dns_port (default 53)" }
+    fn name(&self) -> &str {
+        "start_fakenet"
+    }
+    fn description(&self) -> &str {
+        "Starts FakeNet simulator (DNS Sinkhole + HTTP 200 OK). Args: http_port (default 80), dns_port (default 53)"
+    }
 
     async fn execute(&self, args: Value) -> Result<Value> {
         let http_port = args["http_port"].as_u64().unwrap_or(8080) as u16;
@@ -36,7 +40,7 @@ impl Tool for FakeNet {
                             }
                         }
                     }
-                },
+                }
                 Err(e) => tracing::error!("FakeNet DNS bind failed: {}", e),
             }
         });
@@ -62,7 +66,7 @@ impl Tool for FakeNet {
                             });
                         }
                     }
-                },
+                }
                 Err(e) => tracing::error!("FakeNet HTTP bind failed: {}", e),
             }
         });

@@ -1,8 +1,8 @@
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::fs;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use sha2::{Sha256, Digest};
-use std::fs;
 
 /// LRU-style cache for external tool results
 pub struct ResultCache {
@@ -41,23 +41,29 @@ impl ResultCache {
         // Simple eviction: remove oldest if full
         if self.cache.len() >= self.max_entries {
             // Find oldest entry
-            if let Some(oldest_key) = self.cache.iter()
+            if let Some(oldest_key) = self
+                .cache
+                .iter()
                 .min_by_key(|(_, v)| v.timestamp)
-                .map(|(k, _)| k.clone()) 
+                .map(|(k, _)| k.clone())
             {
                 self.cache.remove(&oldest_key);
             }
         }
 
-        self.cache.insert(hash, CacheEntry {
-            result,
-            timestamp: Instant::now(),
-        });
+        self.cache.insert(
+            hash,
+            CacheEntry {
+                result,
+                timestamp: Instant::now(),
+            },
+        );
     }
 
     /// Clear expired entries
     pub fn cleanup(&mut self) {
-        self.cache.retain(|_, entry| entry.timestamp.elapsed() < self.ttl);
+        self.cache
+            .retain(|_, entry| entry.timestamp.elapsed() < self.ttl);
     }
 }
 
@@ -80,7 +86,11 @@ pub fn get_cache() -> &'static Mutex<ResultCache> {
 }
 
 /// Check cache and return result if available
-pub fn cached_or_execute<F>(file_path: &str, tool_name: &str, execute: F) -> anyhow::Result<serde_json::Value>
+pub fn cached_or_execute<F>(
+    file_path: &str,
+    tool_name: &str,
+    execute: F,
+) -> anyhow::Result<serde_json::Value>
 where
     F: FnOnce() -> anyhow::Result<serde_json::Value>,
 {
@@ -102,7 +112,7 @@ where
 
     // Execute and cache
     let result = execute()?;
-    
+
     {
         let mut cache = get_cache().lock().unwrap();
         cache.insert(hash, result.clone());

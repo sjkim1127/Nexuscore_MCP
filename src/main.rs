@@ -1,8 +1,5 @@
 use anyhow::Result;
 use dotenv::dotenv;
-use tokio::io::{stdin, stdout};
-use nexuscore_mcp::server::NexusCoreServer;
-use rmcp::ServiceExt;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,16 +12,5 @@ async fn main() -> Result<()> {
         .init();
 
     tracing::info!("Starting NexusCore MCP Server (RMCP Standard)...");
-
-    // Initialize the Service (Server Handler)
-    let service = NexusCoreServer::new();
-    
-    // Transport: Stdio
-    let transport = (stdin(), stdout());
-
-    // Run Server
-    tracing::info!("Listening on Stdio...");
-    let _ = service.serve(transport).await?;
-
-    Ok(())
+    nexuscore_mcp::server::run_server().await
 }

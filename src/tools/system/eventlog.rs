@@ -1,7 +1,7 @@
-use anyhow::Result;
-use serde_json::Value;
 use crate::tools::Tool;
+use anyhow::Result;
 use async_trait::async_trait;
+use serde_json::Value;
 use std::process::Command;
 
 /// Windows Event Log Query - Queries Sysmon and Security logs
@@ -9,13 +9,17 @@ pub struct EventLogQuery;
 
 #[async_trait]
 impl Tool for EventLogQuery {
-    fn name(&self) -> &str { "query_sysmon" }
-    fn description(&self) -> &str { "Queries Windows Event Logs (Sysmon/Security). Args: event_id (number), minutes (default 60)" }
+    fn name(&self) -> &str {
+        "query_sysmon"
+    }
+    fn description(&self) -> &str {
+        "Queries Windows Event Logs (Sysmon/Security). Args: event_id (number), minutes (default 60)"
+    }
 
     async fn execute(&self, args: Value) -> Result<Value> {
         let event_id = args["event_id"].as_u64().unwrap_or(1); // Default: Process Create
         let minutes = args["minutes"].as_u64().unwrap_or(60);
-        
+
         // Build PowerShell query for Sysmon
         let ps_script = format!(
             r#"
@@ -49,14 +53,12 @@ impl Tool for EventLogQuery {
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         // Parse JSON output
-        let events: Value = serde_json::from_str(&stdout).unwrap_or_else(|_| {
-            serde_json::json!([])
-        });
+        let events: Value = serde_json::from_str(&stdout).unwrap_or_else(|_| serde_json::json!([]));
 
-        let event_count = if events.is_array() { 
-            events.as_array().map(|a| a.len()).unwrap_or(0) 
-        } else { 
-            1 
+        let event_count = if events.is_array() {
+            events.as_array().map(|a| a.len()).unwrap_or(0)
+        } else {
+            1
         };
 
         Ok(serde_json::json!({
@@ -68,21 +70,21 @@ impl Tool for EventLogQuery {
             },
             "event_count": event_count,
             "events": events,
-            "note": if stderr.contains("No events") || event_count == 0 { 
-                "No events found. Is Sysmon installed and running?" 
-            } else { 
-                "" 
+            "note": if stderr.contains("No events") || event_count == 0 {
+                "No events found. Is Sysmon installed and running?"
+            } else {
+                ""
             }
         }))
     }
 }
 
-/// Common Sysmon Event IDs Reference
-/// 1 = Process Create
-/// 3 = Network Connection
-/// 7 = Image Load (DLL)
-/// 8 = CreateRemoteThread
-/// 10 = Process Access
-/// 11 = File Create
-/// 12/13/14 = Registry Events
-/// 22 = DNS Query
+// Common Sysmon Event IDs Reference
+// 1 = Process Create
+// 3 = Network Connection
+// 7 = Image Load (DLL)
+// 8 = CreateRemoteThread
+// 10 = Process Access
+// 11 = File Create
+// 12/13/14 = Registry Events
+// 22 = DNS Query

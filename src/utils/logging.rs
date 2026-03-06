@@ -1,15 +1,15 @@
-use tracing::{info, warn, error, debug, instrument, Level};
-use std::time::Instant;
 use serde_json::Value;
+use std::time::Instant;
+use tracing::{debug, error, info, instrument, warn, Level};
 
 /// Log tool execution with timing
 #[instrument(skip(result), fields(duration_ms))]
 pub fn log_tool_execution(tool_name: &str, args: &Value, result: &Value, start: Instant) {
     let duration = start.elapsed().as_millis();
-    
+
     let status = result["status"].as_str().unwrap_or("unknown");
     let cached = result["metadata"]["cached"].as_bool().unwrap_or(false);
-    
+
     if status == "success" {
         if cached {
             info!(
@@ -55,12 +55,7 @@ pub fn log_frida_event(event_type: &str, session_id: &str, details: &str) {
 
 /// Log cache operations
 pub fn log_cache_event(operation: &str, key: &str, hit: bool) {
-    debug!(
-        op = operation,
-        key = key,
-        hit = hit,
-        "Cache event"
-    );
+    debug!(op = operation, key = key, hit = hit, "Cache event");
 }
 
 /// Log external tool execution
@@ -115,7 +110,8 @@ impl PerfMetrics {
     pub fn record_call(&self, duration_ms: u64, cached: bool) {
         use std::sync::atomic::Ordering;
         self.tool_calls.fetch_add(1, Ordering::Relaxed);
-        self.total_duration_ms.fetch_add(duration_ms, Ordering::Relaxed);
+        self.total_duration_ms
+            .fetch_add(duration_ms, Ordering::Relaxed);
         if cached {
             self.cache_hits.fetch_add(1, Ordering::Relaxed);
         } else {

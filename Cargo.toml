@@ -17,7 +17,7 @@ winreg = "0.10"
 
 # Security & Analysis
 yara = { version = "0.27", features = ["bundled-4_5_0"] } 
-frida = "0.17.0"
+frida = { version = "0.17.1", features = ["auto-download"] }
 capstone = "0.13"
 iced-x86 = "1.21.0"
 goblin = "0.10.4"

@@ -3,7 +3,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "dynamic-analysis"))]
 use winapi::um::winuser::{
     GetSystemMetrics, SendInput, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYEVENTF_KEYUP,
     MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, SM_CXSCREEN,
@@ -26,7 +26,7 @@ impl Tool for InputSimulator {
             .as_str()
             .ok_or(anyhow::anyhow!("Missing action"))?;
 
-        #[cfg(windows)]
+        #[cfg(all(windows, feature = "dynamic-analysis"))]
         unsafe {
             match action {
                 "mouse_move" => {
@@ -104,9 +104,9 @@ impl Tool for InputSimulator {
             }
         }
 
-        #[cfg(not(windows))]
+        #[cfg(not(all(windows, feature = "dynamic-analysis")))]
         return Err(anyhow::anyhow!(
-            "Input simulation only supported on Windows"
+            "Input simulation only supported on Windows with dynamic-analysis feature enabled"
         ));
     }
 }

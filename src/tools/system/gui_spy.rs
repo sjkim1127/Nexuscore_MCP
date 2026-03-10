@@ -5,11 +5,11 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::time::Instant;
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "dynamic-analysis"))]
 use winapi::shared::minwindef::{BOOL, DWORD, LPARAM};
-#[cfg(windows)]
+#[cfg(all(windows, feature = "dynamic-analysis"))]
 use winapi::shared::windef::HWND;
-#[cfg(windows)]
+#[cfg(all(windows, feature = "dynamic-analysis"))]
 use winapi::um::winuser::{
     EnumWindows, GetClassNameW, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
     IsWindowVisible,
@@ -17,13 +17,13 @@ use winapi::um::winuser::{
 
 pub struct GuiSpy;
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "dynamic-analysis"))]
 struct EnumState {
     target_pid: u32,
     windows: Vec<serde_json::Value>,
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "dynamic-analysis"))]
 unsafe extern "system" fn enum_window_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let state = &mut *(lparam as *mut EnumState);
     let mut window_pid: DWORD = 0;
@@ -77,7 +77,7 @@ impl Tool for GuiSpy {
             None => return Ok(StandardResponse::error(tool_name, "Missing pid")),
         };
 
-        #[cfg(windows)]
+        #[cfg(all(windows, feature = "dynamic-analysis"))]
         {
             let mut state = EnumState {
                 target_pid: pid,
@@ -97,14 +97,14 @@ impl Tool for GuiSpy {
             ))
         }
 
-        #[cfg(not(windows))]
+        #[cfg(not(all(windows, feature = "dynamic-analysis")))]
         Ok(StandardResponse::error(
             tool_name,
-            "Only supported on Windows",
+            "Only supported on Windows with dynamic-analysis feature enabled",
         ))
     }
 }
 
 inventory::submit! {
-    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(GuiSpy::new()))
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(GuiSpy))
 }

@@ -79,3 +79,7 @@ impl Tool for FakeNet {
         }))
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(FakeNet))
+}

@@ -9,6 +9,7 @@ use tokio::time::sleep;
 #[derive(Clone)]
 pub struct CapeClient {
     base_url: String,
+    #[allow(dead_code)]
     api_token: String, // CAPE setting optional
     client: Client,
 }

@@ -88,3 +88,7 @@ impl Tool for EventLogQuery {
 // 11 = File Create
 // 12/13/14 = Registry Events
 // 22 = DNS Query
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(EventLogQuery))
+}

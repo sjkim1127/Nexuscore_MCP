@@ -1,3 +1,4 @@
+#![cfg(feature = "dynamic-analysis")]
 use crate::engine::frida_handler::get_session_manager;
 use crate::tools::{ParamDef, Tool, ToolSchema};
 use crate::utils::response::StandardResponse;
@@ -273,4 +274,28 @@ impl Tool for FridaSessionList {
             }),
         ))
     }
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(FridaSessionCreate))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(FridaSessionInject))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(FridaSessionResume))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(FridaSessionMessages))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(FridaSessionDestroy))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(FridaSessionList))
 }

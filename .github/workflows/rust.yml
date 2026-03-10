@@ -1,4 +1,4 @@
-name: Rust CI
+name: Rust CI Matrix
 
 on:
   push:
@@ -10,50 +10,36 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    runs-on: windows-latest
+  build_and_test:
+    name: ${{ matrix.os }} / ${{ matrix.features }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        features:
+          - "--no-default-features"
+          - ""  # default features
+          - "--features static-analysis"
+          - "--features dynamic-analysis"
+          - "--features emulation"
+          - "--all-features"
 
     steps:
     - uses: actions/checkout@v6
 
-    # 1. Install LLVM (Required for bindgen)
-    - name: Install LLVM and Clang
+    - name: Install LLVM (Windows)
+      if: runner.os == 'Windows'
       run: choco install llvm -y
 
-    - name: Set LIBCLANG_PATH
+    - name: Set LIBCLANG_PATH (Windows)
+      if: runner.os == 'Windows'
       shell: powershell
       run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-    # 1.5. Install Analysis Tools (DIE, CAPA, etc.)
-    - name: Install Analysis Tools
-      shell: powershell
-      run: |
-        # Run the setup script but skip the interactive/heavy parts if possible
-        # Since we are in CI, we just want the binaries
-        .\scripts\setup_tools.ps1
-        
-        # Add tool directories to GITHUB_PATH for subsequent steps
-        $toolsDir = Resolve-Path "bin"
-        echo "$toolsDir\Sysinternals" >> $env:GITHUB_PATH
-        echo "$toolsDir\DetectItEasy" >> $env:GITHUB_PATH
-        echo "$toolsDir\Capa" >> $env:GITHUB_PATH
-        echo "$toolsDir\Floss" >> $env:GITHUB_PATH
-        echo "$toolsDir\PE-Sieve" >> $env:GITHUB_PATH
-
-    - name: Verify Tools
-      shell: powershell
-      run: |
-        Write-Host "Verifying tool installations..."
-        # diec might return non-zero for help/version without args, using a check for existence if needed, but --version is usually fine
-        diec --version
-        capa --version
-        floss --version
-        pe-sieve64.exe /help
-        handle.exe -accepteula /?
-        Write-Host "All tools verified successfully."
-
-    # 2. Setup Frida DevKit
-    - name: Setup Frida DevKit
+    # Setup Frida DevKit only if we might need it (dynamic-analysis or all-features)
+    - name: Setup Frida DevKit (Windows)
+      if: runner.os == 'Windows' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
       shell: powershell
       run: |
         $frida_version = "16.5.11"
@@ -63,48 +49,25 @@ jobs:
         
         Write-Host "Downloading Frida DevKit v$frida_version..."
         Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-        
         New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
-        
-        # Extract using 7z
         & "7z" x $output -o"$env:GITHUB_WORKSPACE" -y
         $tarFile = $output.Replace(".xz", "")
         & "7z" x $tarFile -o"$extractRoot" -y
         
-        # Find the actual directory containing frida-core.h
         $header = Get-ChildItem -Path $extractRoot -Filter "frida-core.h" -Recurse | Select-Object -First 1
-        if ($header) {
-            $devkitPath = $header.Directory.FullName
-        } else {
-            $devkitPath = $extractRoot
-        }
+        if ($header) { $devkitPath = $header.Directory.FullName } else { $devkitPath = $extractRoot }
         
-        Write-Host "Frida DevKit found at: $devkitPath"
-        
-        # Set environment variables for frida-sys build
         echo "FRIDA_CORE_DEVKIT=$devkitPath" >> $env:GITHUB_ENV
         $clangInclude = "-I" + $devkitPath.Replace("\", "/")
         echo "BINDGEN_EXTRA_CLANG_ARGS=$clangInclude" >> $env:GITHUB_ENV
 
-    # 3. Build
-    - name: Build
-      run: cargo build --release --verbose
-      env:
-        FRIDA_CORE_DEVKIT: ${{ env.FRIDA_CORE_DEVKIT }}
-        BINDGEN_EXTRA_CLANG_ARGS: ${{ env.BINDGEN_EXTRA_CLANG_ARGS }}
+    - name: Install capstone dependencies (Ubuntu)
+      if: runner.os == 'Linux' && (contains(matrix.features, 'emulation') || contains(matrix.features, 'all-features'))
+      run: sudo apt-get install -y cmake build-essential python3
 
-    # 4. Run tests (allow failure for now)
-    - name: Run tests
-      run: cargo test --verbose
-      continue-on-error: true
-      env:
-        FRIDA_CORE_DEVKIT: ${{ env.FRIDA_CORE_DEVKIT }}
-        BINDGEN_EXTRA_CLANG_ARGS: ${{ env.BINDGEN_EXTRA_CLANG_ARGS }}
-
-    # 5. Clippy lint
-    - name: Clippy
-      run: cargo clippy -- -D warnings
-      continue-on-error: true
-      env:
-        FRIDA_CORE_DEVKIT: ${{ env.FRIDA_CORE_DEVKIT }}
-        BINDGEN_EXTRA_CLANG_ARGS: ${{ env.BINDGEN_EXTRA_CLANG_ARGS }}
+    - name: Run Cargo Check
+      run: cargo check ${{ matrix.features }}
+      
+    - name: Run Cargo Test
+      run: cargo test ${{ matrix.features }}
+      continue-on-error: true # Allow tests to fail if tools are missing

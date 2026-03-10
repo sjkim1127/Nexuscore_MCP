@@ -40,21 +40,40 @@ impl ParamDef {
     }
 }
 
-/// Tool input schema
+/// Tool input schema (Supports both schemars and legacy ParamDef)
 pub struct ToolSchema {
     pub params: Vec<ParamDef>,
+    pub json: Option<Value>,
 }
 
 impl ToolSchema {
+    // Legacy support for ParamDef
     pub fn new(params: Vec<ParamDef>) -> Self {
-        Self { params }
+        Self { params, json: None }
+    }
+
+    /// Modern schemars support
+    pub fn from_json(json: Value) -> Self {
+        Self {
+            params: vec![],
+            json: Some(json),
+        }
     }
 
     pub fn empty() -> Self {
-        Self { params: vec![] }
+        Self {
+            params: vec![],
+            json: None,
+        }
     }
 
     pub fn to_json(&self) -> Value {
+        // Use schemars-generated JSON if available
+        if let Some(json) = &self.json {
+            return json.clone();
+        }
+
+        // Fallback to manual assembly (legacy)
         let mut properties = serde_json::Map::new();
         let mut required = Vec::new();
 
@@ -115,3 +134,15 @@ macro_rules! tool_params {
     (@desc) => { "" };
     (@desc $desc:literal) => { $desc };
 }
+
+pub struct ToolRegistration {
+    pub create: fn() -> std::sync::Arc<dyn Tool>,
+}
+
+impl ToolRegistration {
+    pub const fn new(create: fn() -> std::sync::Arc<dyn Tool>) -> Self {
+        Self { create }
+    }
+}
+
+inventory::collect!(ToolRegistration);

@@ -80,17 +80,18 @@ impl Tool for SystemDiff {
                 ))
             }
             "compare" => {
-                let lock = SNAPSHOT.lock().unwrap();
-                let old_files = match &*lock {
-                    Some(f) => f.clone(),
-                    None => {
-                        return Ok(StandardResponse::error(
-                            tool_name,
-                            "No snapshot taken yet. Run with action='take' first.",
-                        ))
+                let old_files = {
+                    let lock = SNAPSHOT.lock().unwrap();
+                    match &*lock {
+                        Some(f) => f.clone(),
+                        None => {
+                            return Ok(StandardResponse::error(
+                                tool_name,
+                                "No snapshot taken yet. Run with action='take' first.",
+                            ))
+                        }
                     }
                 };
-                drop(lock);
 
                 let paths_clone = paths.clone();
 
@@ -120,4 +121,8 @@ impl Tool for SystemDiff {
             )),
         }
     }
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(SystemDiff))
 }

@@ -81,3 +81,7 @@ impl Tool for NetworkCapture {
         }
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(NetworkCapture))
+}

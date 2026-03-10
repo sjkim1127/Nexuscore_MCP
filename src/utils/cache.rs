@@ -1,69 +1,62 @@
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::fs;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// LRU-style cache for external tool results
+/// Persistent cache for external tool results using sled
 pub struct ResultCache {
-    cache: HashMap<String, CacheEntry>,
-    max_entries: usize,
+    db: sled::Db,
     ttl: Duration,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 struct CacheEntry {
     result: serde_json::Value,
-    timestamp: Instant,
+    timestamp: u64,
 }
 
 impl ResultCache {
-    pub fn new(max_entries: usize, ttl_seconds: u64) -> Self {
-        Self {
-            cache: HashMap::new(),
-            max_entries,
+    pub fn new(db_path: &str, ttl_seconds: u64) -> anyhow::Result<Self> {
+        let db = sled::open(db_path)?;
+        Ok(Self {
+            db,
             ttl: Duration::from_secs(ttl_seconds),
-        }
-    }
-
-    /// Get cached result by file hash
-    pub fn get(&self, hash: &str) -> Option<&serde_json::Value> {
-        self.cache.get(hash).and_then(|entry| {
-            if entry.timestamp.elapsed() < self.ttl {
-                Some(&entry.result)
-            } else {
-                None
-            }
         })
     }
 
-    /// Store result with file hash as key
-    pub fn insert(&mut self, hash: String, result: serde_json::Value) {
-        // Simple eviction: remove oldest if full
-        if self.cache.len() >= self.max_entries {
-            // Find oldest entry
-            if let Some(oldest_key) = self
-                .cache
-                .iter()
-                .min_by_key(|(_, v)| v.timestamp)
-                .map(|(k, _)| k.clone())
-            {
-                self.cache.remove(&oldest_key);
+    /// Get cached result by file hash
+    pub fn get(&self, hash: &str) -> Option<serde_json::Value> {
+        if let Ok(Some(value)) = self.db.get(hash) {
+            if let Ok(entry) = serde_json::from_slice::<CacheEntry>(&value) {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
+                if now - entry.timestamp < self.ttl.as_secs() {
+                    return Some(entry.result);
+                } else {
+                    // Evict expired
+                    let _ = self.db.remove(hash);
+                }
             }
         }
-
-        self.cache.insert(
-            hash,
-            CacheEntry {
-                result,
-                timestamp: Instant::now(),
-            },
-        );
+        None
     }
 
-    /// Clear expired entries
-    pub fn cleanup(&mut self) {
-        self.cache
-            .retain(|_, entry| entry.timestamp.elapsed() < self.ttl);
+    /// Store result with file hash as key
+    pub fn insert(&self, hash: String, result: serde_json::Value) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let entry = CacheEntry {
+            result,
+            timestamp: now,
+        };
+        if let Ok(value) = serde_json::to_vec(&entry) {
+            let _ = self.db.insert(hash, value);
+        }
     }
 }
 
@@ -76,12 +69,15 @@ pub fn file_hash(path: &str) -> Result<String, std::io::Error> {
     Ok(hex::encode(result))
 }
 
-/// Global cache instance
-static GLOBAL_CACHE: std::sync::OnceLock<Mutex<ResultCache>> = std::sync::OnceLock::new();
+/// Global sled cache instance
+static GLOBAL_CACHE: std::sync::OnceLock<ResultCache> = std::sync::OnceLock::new();
 
-pub fn get_cache() -> &'static Mutex<ResultCache> {
+pub fn get_cache() -> &'static ResultCache {
     GLOBAL_CACHE.get_or_init(|| {
-        Mutex::new(ResultCache::new(100, 3600)) // 100 entries, 1 hour TTL
+        let cache_dir = "logs/.nexuscore_cache";
+        // 7 days TTL for external analysis results
+        ResultCache::new(cache_dir, 3600 * 24 * 7)
+            .expect("Failed to initialize sled persistent cache")
     })
 }
 
@@ -99,24 +95,17 @@ where
         Err(_) => return execute(), // Can't hash, just execute
     };
 
-    // Check cache
-    {
-        let cache = get_cache().lock().unwrap();
-        if let Some(cached) = cache.get(&hash) {
-            return Ok(serde_json::json!({
-                "cached": true,
-                "result": cached.clone()
-            }));
-        }
+    let cache = get_cache();
+    if let Some(cached) = cache.get(&hash) {
+        return Ok(serde_json::json!({
+            "cached": true,
+            "result": cached
+        }));
     }
 
     // Execute and cache
     let result = execute()?;
-
-    {
-        let mut cache = get_cache().lock().unwrap();
-        cache.insert(hash, result.clone());
-    }
+    cache.insert(hash, result.clone());
 
     Ok(result)
 }

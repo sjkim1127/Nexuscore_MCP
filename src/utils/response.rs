@@ -114,4 +114,21 @@ impl StandardResponse {
         })
         .unwrap_or_else(|_| serde_json::json!({"error": "serialization failed"}))
     }
+
+    pub fn success_large(tool: &str, summary: Value, dump_id: &str) -> Value {
+        serde_json::to_value(Self {
+            tool: tool.to_string(),
+            status: ResponseStatus::Partial,
+            timestamp: current_timestamp(),
+            data: serde_json::json!({
+                "summary": summary,
+                "dump_id": dump_id,
+                "resource_uri": format!("mcp://dumps/{}", dump_id),
+                "notice": "Full data is too large for context. Use read_memory_chunk or access the resource URI."
+            }),
+            metadata: ResponseMetadata::default(),
+            error: Some("Output truncated for context optimization".to_string()),
+        })
+        .unwrap_or_else(|_| serde_json::json!({"error": "serialization failed"}))
+    }
 }

@@ -110,3 +110,7 @@ impl Tool for InputSimulator {
         ));
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(InputSimulator))
+}

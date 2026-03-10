@@ -121,16 +121,21 @@ impl PerfMetrics {
 
     pub fn get_stats(&self) -> serde_json::Value {
         use std::sync::atomic::Ordering;
+        let hits = self.cache_hits.load(Ordering::Relaxed) as f64;
+        let total = (self.cache_hits.load(Ordering::Relaxed)
+            + self.cache_misses.load(Ordering::Relaxed)) as f64;
+        let hit_rate = if total > 0.0 {
+            hits / total * 100.0
+        } else {
+            0.0
+        };
+
         serde_json::json!({
             "total_calls": self.tool_calls.load(Ordering::Relaxed),
             "cache_hits": self.cache_hits.load(Ordering::Relaxed),
             "cache_misses": self.cache_misses.load(Ordering::Relaxed),
             "total_duration_ms": self.total_duration_ms.load(Ordering::Relaxed),
-            "cache_hit_rate": {
-                let hits = self.cache_hits.load(Ordering::Relaxed) as f64;
-                let total = (self.cache_hits.load(Ordering::Relaxed) + self.cache_misses.load(Ordering::Relaxed)) as f64;
-                if total > 0.0 { hits / total * 100.0 } else { 0.0 }
-            }
+            "cache_hit_rate": hit_rate
         })
     }
 }

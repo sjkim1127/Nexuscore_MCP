@@ -1,3 +1,4 @@
+#![cfg(feature = "dynamic-analysis")]
 use crate::engine::frida_handler;
 use crate::tools::Tool;
 use anyhow::Result;
@@ -42,4 +43,8 @@ impl Tool for InstallHook {
 
         Ok(serde_json::json!({ "status": "hook_installed", "target": target }))
     }
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(InstallHook))
 }

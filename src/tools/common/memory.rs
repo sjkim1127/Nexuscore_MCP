@@ -1,3 +1,4 @@
+#![cfg(feature = "dynamic-analysis")]
 use crate::engine::frida_handler;
 use crate::tools::Tool;
 use anyhow::Result;
@@ -71,4 +72,12 @@ impl Tool for SearchMemory {
 
         Ok(serde_json::json!({ "status": "scanning", "pid": pid }))
     }
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(ReadMemory))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(SearchMemory))
 }

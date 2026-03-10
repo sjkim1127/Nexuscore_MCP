@@ -8,36 +8,56 @@ tokio = { version = "1.49", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
-async-trait = "0.1"
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 dotenv = "0.15.0"
-winreg = "0.55"
+inventory = "0.3.15"
 
 # Security & Analysis
-yara = { version = "0.27", features = ["bundled-4_5_0"] } 
-frida = "0.17.1"
-capstone = "0.14"
+yara = { version = "0.27", features = ["bundled-4_5_0"], optional = true } 
+frida = { version = "0.17.1", optional = true }
+capstone = { version = "0.14", optional = true }
 iced-x86 = "1.21.0"
-goblin = "0.10.4"
+goblin = { version = "0.10.4", optional = true }
 hex = "0.4.3"
 
 # MCP Protocol
-rmcp = { version = "0.11.0", features = ["server"] }
+rmcp = { version = "0.11.0", features = ["server", "transport-io"] }
 schemars = "1.2.0"
 
 # Phase 2: Advanced Tools
-unicorn-engine = "2.0"    # Shellcode emulation
+unicorn-engine = { version = "2.1.5", optional = true }    # Shellcode emulation
 base64 = "0.22"           # Config extractor
 aes = "0.8"               # Config extractor
 cbc = "0.1"               # AES CBC mode
 rc4 = "0.1"               # Config extractor
 sha2 = "0.10"             # System diff (hashing)
 walkdir = "2.4"           # System diff (file walk)
-winapi = { version = "0.3", features = ["winuser", "libloaderapi"] } # Input sim + GUI spy
 chrono = "0.4"            # YARA generator timestamps
 which = "8.0"             # x64dbg path detection
+async-trait = "0.1.89"
+sled = "0.34.7"
+tracing-appender = "0.2.4"
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
+
+# Observability (Optional)
+opentelemetry = { version = "0.27", optional = true }
+opentelemetry_sdk = { version = "0.27", optional = true, features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", optional = true }
+tracing-opentelemetry = { version = "0.28", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+winapi = { version = "0.3", features = ["winuser", "libloaderapi"], optional = true } # Input sim + GUI spy
+
+[features]
+default = ["static-analysis"]
+full = ["static-analysis", "dynamic-analysis", "emulation", "observability"]
+dynamic-analysis = ["frida", "winapi"]
+emulation = ["unicorn-engine", "capstone"]
+static-analysis = ["yara", "goblin"]
+observability = ["opentelemetry", "opentelemetry_sdk", "opentelemetry-otlp", "tracing-opentelemetry"]
 
 [dev-dependencies]
 mockito = "1.1.0"

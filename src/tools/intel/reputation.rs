@@ -82,3 +82,7 @@ async fn query_virustotal(query_type: &str, value: &str, api_key: &str) -> Value
         Err(e) => serde_json::json!({ "error": e.to_string() }),
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(ReputationChecker))
+}

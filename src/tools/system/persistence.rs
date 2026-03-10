@@ -75,3 +75,7 @@ impl Tool for PersistenceHunter {
         ))
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(PersistenceHunter))
+}

@@ -26,3 +26,7 @@ impl Tool for MetricsTool {
         Ok(StandardResponse::success(tool_name, stats))
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(MetricsTool))
+}

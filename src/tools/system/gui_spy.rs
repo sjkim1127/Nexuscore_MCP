@@ -104,3 +104,7 @@ impl Tool for GuiSpy {
         ))
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(GuiSpy::new()))
+}

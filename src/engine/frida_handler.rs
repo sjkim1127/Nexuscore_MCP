@@ -189,6 +189,20 @@ impl FridaSessionManager {
     pub fn get_pid(&self, session_id: &str) -> Option<u32> {
         self.sessions.get(session_id).map(|s| s.pid)
     }
+
+    /// Cleanup all active sessions and processes
+    pub fn cleanup_all(&mut self) {
+        tracing::info!("Cleaning up {} active Frida sessions", self.sessions.len());
+        let frida = get_frida();
+        if let Ok(device_manager) = DeviceManager::obtain(frida) {
+            if let Ok(device) = device_manager.get_local_device() {
+                for (id, session) in self.sessions.drain() {
+                    tracing::info!("Killing PID {} from session {}", session.pid, id);
+                    let _ = device.kill(session.pid);
+                }
+            }
+        }
+    }
 }
 
 // ============================================

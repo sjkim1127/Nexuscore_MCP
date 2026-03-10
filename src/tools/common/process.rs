@@ -1,3 +1,4 @@
+#![cfg(feature = "dynamic-analysis")]
 use crate::engine::frida_handler::FridaHandler;
 use crate::tools::{ParamDef, Tool, ToolSchema};
 use crate::utils::response::StandardResponse;
@@ -8,6 +9,7 @@ use std::time::Instant;
 
 pub struct InjectFridaScript;
 
+#[async_trait]
 #[async_trait]
 impl Tool for InjectFridaScript {
     fn name(&self) -> &str {
@@ -106,6 +108,12 @@ impl Tool for SpawnProcess {
     }
 }
 
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+pub struct AttachProcessArgs {
+    /// Target process ID
+    pub pid: u32,
+}
+
 pub struct AttachProcess;
 
 #[async_trait]
@@ -117,28 +125,29 @@ impl Tool for AttachProcess {
         "Attaches to a running process. Args: pid (number)"
     }
     fn schema(&self) -> ToolSchema {
-        ToolSchema::new(vec![ParamDef::new(
-            "pid",
-            "number",
-            true,
-            "Target process ID",
-        )])
+        let json = serde_json::to_value(schemars::schema_for!(AttachProcessArgs)).unwrap();
+        ToolSchema::from_json(json)
     }
 
     async fn execute(&self, args: Value) -> Result<Value> {
         let start = Instant::now();
         let tool_name = self.name();
 
-        let pid = match args["pid"].as_u64() {
-            Some(p) => p as u32,
-            None => return Ok(StandardResponse::error(tool_name, "Missing pid")),
+        let parsed_args: AttachProcessArgs = match serde_json::from_value(args.clone()) {
+            Ok(v) => v,
+            Err(e) => {
+                return Ok(StandardResponse::error(
+                    tool_name,
+                    &format!("Invalid arguments: {}", e),
+                ))
+            }
         };
 
         let engine = FridaHandler::new();
-        match engine.attach_process(pid).await {
+        match engine.attach_process(parsed_args.pid).await {
             Ok(_) => Ok(StandardResponse::success_timed(
                 tool_name,
-                serde_json::json!({ "pid": pid }),
+                serde_json::json!({ "pid": parsed_args.pid }),
                 start,
             )),
             Err(e) => Ok(StandardResponse::error(tool_name, &e.to_string())),
@@ -184,4 +193,20 @@ impl Tool for ResumeProcess {
             Err(e) => Ok(StandardResponse::error(tool_name, &e.to_string())),
         }
     }
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(InjectFridaScript))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(SpawnProcess))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(AttachProcess))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(ResumeProcess))
 }

@@ -1,10 +1,36 @@
+# Rust
 /target
+
+# Environments
+.env
+.env.*
+!.env.example
+
+# Logs & Analysis Data
+logs/
+bin/
+*.log
+*.dump
+dumps/
+
+# IDB/Reversing
+*.idb
+*.i64
+*.nam
+*.til
+
+# Temp/Backup
 **/*.rs.bk
 *.pdb
 *.exe
 *.dll
 *.lib
-.idea/
-.vscode/
 *.swp
 *.iml
+.idea/
+.vscode/
+parse_test.rs
+
+# OS
+.DS_Store
+Thumbs.db

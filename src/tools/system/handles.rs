@@ -82,3 +82,7 @@ impl Tool for HandleScanner {
         }
     }
 }
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(HandleScanner))
+}

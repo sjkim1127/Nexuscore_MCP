@@ -11,7 +11,7 @@ async fn test_metrics_tool_invocation() {
     let tool = (metrics_tool.create)();
 
     // 2. Execute it
-    let result = tool.execute(json!({})).await;
+    let result: Result<serde_json::Value, anyhow::Error> = tool.execute(json!({})).await;
 
     // 3. Validate response
     assert!(result.is_ok(), "Tool execution failed: {:?}", result.err());

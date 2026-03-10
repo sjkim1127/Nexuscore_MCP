@@ -2,12 +2,16 @@
 
 use nexuscore_mcp::utils::cache::{file_hash, get_cache, ResultCache};
 use serde_json::json;
+use std::fs;
 use std::thread;
 use std::time::Duration;
 
 #[test]
 fn test_cache_insert_and_get() {
-    let mut cache = ResultCache::new(10, 60);
+    let db_path = "logs/.test_cache_1";
+    let _ = fs::remove_dir_all(db_path);
+
+    let cache = ResultCache::new(db_path, 60).expect("Failed to create cache");
 
     let key = "test:abc123".to_string();
     let value = json!({"result": "test_data"});
@@ -21,7 +25,9 @@ fn test_cache_insert_and_get() {
 
 #[test]
 fn test_cache_miss() {
-    let cache = ResultCache::new(10, 60);
+    let db_path = "logs/.test_cache_2";
+    let _ = fs::remove_dir_all(db_path);
+    let cache = ResultCache::new(db_path, 60).expect("Failed to create cache");
 
     let result = cache.get("nonexistent:key");
     assert!(result.is_none());
@@ -29,7 +35,9 @@ fn test_cache_miss() {
 
 #[test]
 fn test_cache_expiry() {
-    let mut cache = ResultCache::new(10, 1); // 1 second TTL
+    let db_path = "logs/.test_cache_3";
+    let _ = fs::remove_dir_all(db_path);
+    let cache = ResultCache::new(db_path, 1).expect("Failed to create cache"); // 1 second TTL
 
     let key = "test:expiry".to_string();
     let value = json!({"data": "will_expire"});
@@ -47,59 +55,26 @@ fn test_cache_expiry() {
 }
 
 #[test]
-fn test_cache_eviction() {
-    let mut cache = ResultCache::new(3, 60); // Max 3 entries
-
-    cache.insert("key1".to_string(), json!(1));
-    cache.insert("key2".to_string(), json!(2));
-    cache.insert("key3".to_string(), json!(3));
-
-    // Add 4th entry - should evict oldest
-    cache.insert("key4".to_string(), json!(4));
-
-    // key1 should be evicted
-    assert!(cache.get("key1").is_none());
-    assert!(cache.get("key4").is_some());
-}
-
-#[test]
-fn test_cache_cleanup() {
-    let mut cache = ResultCache::new(10, 1);
-
-    cache.insert("key1".to_string(), json!(1));
-    cache.insert("key2".to_string(), json!(2));
-
-    thread::sleep(Duration::from_secs(2));
-
-    cache.cleanup();
-
-    // All entries should be removed after cleanup
-    assert!(cache.get("key1").is_none());
-    assert!(cache.get("key2").is_none());
-}
-
-#[test]
 fn test_global_cache() {
     let cache = get_cache();
-    let mut guard = cache.lock().unwrap();
 
-    guard.insert("global:test".to_string(), json!({"global": true}));
+    cache.insert("global:test".to_string(), json!({"global": true}));
 
-    let result = guard.get("global:test");
+    let result = cache.get("global:test");
     assert!(result.is_some());
 }
 
 #[cfg(test)]
 mod file_hash_tests {
     use super::*;
-    use std::fs;
+    use std::fs::File;
     use std::io::Write;
 
     #[test]
     fn test_file_hash_consistency() {
         // Create temp file
         let path = "test_hash_file.tmp";
-        let mut file = fs::File::create(path).unwrap();
+        let mut file = File::create(path).unwrap();
         file.write_all(b"test content for hashing").unwrap();
         drop(file);
 

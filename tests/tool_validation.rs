@@ -1,5 +1,4 @@
-use nexuscore_mcp::tools::{Tool, ToolRegistration};
-use serde_json::Value;
+use nexuscore_mcp::tools::ToolRegistration;
 
 #[test]
 fn test_all_registered_tools_validation() {

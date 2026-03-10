@@ -147,8 +147,8 @@ Before you begin, ensure you have:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/NexusCore_MCP.git
-cd NexusCore_MCP
+git clone https://github.com/sjkim1127/Nexuscore_MCP.git
+cd Nexuscore_MCP
 ```
 
 ### Step 2: Automated Environment Setup

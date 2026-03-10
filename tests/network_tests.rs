@@ -12,7 +12,8 @@ async fn test_network_capture_metadata() {
 #[tokio::test]
 async fn test_network_capture_invalid_action() {
     let tool = NetworkCapture;
-    let result = tool.execute(json!({"action": "invalid"})).await;
+    let result: Result<serde_json::Value, anyhow::Error> =
+        tool.execute(json!({"action": "invalid"})).await;
     assert!(result.is_err());
 }
 

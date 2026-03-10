@@ -44,8 +44,8 @@ uuid = { version = "1.10.0", features = ["serde", "v4"] }
 # Observability (Optional)
 opentelemetry = { version = "0.27", optional = true }
 opentelemetry_sdk = { version = "0.27", optional = true, features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.27", optional = true }
-tracing-opentelemetry = { version = "0.28", optional = true }
+opentelemetry-otlp = { version = "0.27", optional = true, features = ["grpc-tonic", "trace"] }
+tracing-opentelemetry = { version = "0.27", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -53,7 +53,7 @@ winapi = { version = "0.3", features = ["winuser", "libloaderapi"], optional = t
 
 [features]
 default = ["static-analysis"]
-full = ["static-analysis", "dynamic-analysis", "emulation", "observability"]
+full = ["static-analysis", "dynamic-analysis", "emulation"]
 dynamic-analysis = ["frida", "winapi"]
 emulation = ["unicorn-engine", "capstone"]
 static-analysis = ["yara", "goblin"]

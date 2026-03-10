@@ -2,9 +2,9 @@ name: Rust CI Matrix
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,55 +19,61 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         features:
           - "--no-default-features"
-          - ""  # default features
+          - "" # default features
           - "--features static-analysis"
           - "--features dynamic-analysis"
           - "--features emulation"
           - "--all-features"
 
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-    - name: Install LLVM (Windows)
-      if: runner.os == 'Windows'
-      run: choco install llvm -y
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm -y
 
-    - name: Set LIBCLANG_PATH (Windows)
-      if: runner.os == 'Windows'
-      shell: powershell
-      run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+      - name: Set LIBCLANG_PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-    # Setup Frida DevKit only if we might need it (dynamic-analysis or all-features)
-    - name: Setup Frida DevKit (Windows)
-      if: runner.os == 'Windows' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
-      shell: powershell
-      run: |
-        $frida_version = "16.5.11"
-        $url = "https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-windows-x86_64.tar.xz"
-        $output = "$env:GITHUB_WORKSPACE\frida-devkit.tar.xz"
-        $extractRoot = "$env:GITHUB_WORKSPACE\frida-temp"
-        
-        Write-Host "Downloading Frida DevKit v$frida_version..."
-        Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
-        New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
-        & "7z" x $output -o"$env:GITHUB_WORKSPACE" -y
-        $tarFile = $output.Replace(".xz", "")
-        & "7z" x $tarFile -o"$extractRoot" -y
-        
-        $header = Get-ChildItem -Path $extractRoot -Filter "frida-core.h" -Recurse | Select-Object -First 1
-        if ($header) { $devkitPath = $header.Directory.FullName } else { $devkitPath = $extractRoot }
-        
-        echo "FRIDA_CORE_DEVKIT=$devkitPath" >> $env:GITHUB_ENV
-        $clangInclude = "-I" + $devkitPath.Replace("\", "/")
-        echo "BINDGEN_EXTRA_CLANG_ARGS=$clangInclude" >> $env:GITHUB_ENV
+      # Setup Frida DevKit only if we might need it (dynamic-analysis or all-features)
+      - name: Setup Frida DevKit (Windows)
+        if: runner.os == 'Windows' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
+        shell: powershell
+        run: |
+          $frida_version = "16.5.11"
+          $url = "https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-windows-x86_64.tar.xz"
+          $output = "$env:GITHUB_WORKSPACE\frida-devkit.tar.xz"
+          $extractRoot = "$env:GITHUB_WORKSPACE\frida-temp"
 
-    - name: Install capstone dependencies (Ubuntu)
-      if: runner.os == 'Linux' && (contains(matrix.features, 'emulation') || contains(matrix.features, 'all-features'))
-      run: sudo apt-get install -y cmake build-essential python3
+          Write-Host "Downloading Frida DevKit v$frida_version..."
+          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+          New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
+          & "7z" x $output -o"$env:GITHUB_WORKSPACE" -y
+          $tarFile = $output.Replace(".xz", "")
+          & "7z" x $tarFile -o"$extractRoot" -y
 
-    - name: Run Cargo Check
-      run: cargo check ${{ matrix.features }}
-      
-    - name: Run Cargo Test
-      run: cargo test ${{ matrix.features }}
-      continue-on-error: true # Allow tests to fail if tools are missing
+          $header = Get-ChildItem -Path $extractRoot -Filter "frida-core.h" -Recurse | Select-Object -First 1
+          if ($header) { $devkitPath = $header.Directory.FullName } else { $devkitPath = $extractRoot }
+
+          echo "FRIDA_CORE_DEVKIT=$devkitPath" >> $env:GITHUB_ENV
+          $clangInclude = "-I" + $devkitPath.Replace("\", "/")
+          echo "BINDGEN_EXTRA_CLANG_ARGS=$clangInclude" >> $env:GITHUB_ENV
+
+      - name: Install capstone dependencies (Ubuntu)
+        if: runner.os == 'Linux' && (contains(matrix.features, 'emulation') || contains(matrix.features, 'all-features'))
+        run: sudo apt-get install -y cmake build-essential python3
+
+      - name: Run Cargo Check
+        run: cargo check ${{ matrix.features }}
+
+      - name: Run Cargo Test
+        run: cargo test ${{ matrix.features }}
+        # We no longer suppress errors here to ensure tool integrity.
+        # Tools that require specific environments (e.g. Frida on Windows)
+        # should use #[cfg(all(windows, feature = "dynamic-analysis"))] to skip in CI.
+
+      - name: Tool Health Check (Integrity & Invocability)
+        if: contains(matrix.features, '--all-features') || contains(matrix.features, 'emulation')
+        run: cargo test --test tool_validation --test tool_invocation_tests ${{ matrix.features }}

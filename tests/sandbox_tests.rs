@@ -50,17 +50,39 @@ mod tests {
             }))
             .await;
 
-        // Cleanup
-        fs::remove_file(dummy_path).unwrap();
-
         assert!(
             result.is_ok(),
             "Sandbox submission flow failed: {:?}",
             result.err()
         );
         let output = result.unwrap();
-        assert_eq!(output["task_id"], 100);
-        assert_eq!(output["cape_status"], "reported");
+        let job_id = output["job_id"].as_str().expect("job_id missing");
+
+        let job_manager = nexuscore_mcp::utils::jobs::get_job_manager();
+        let mut completed = false;
+        let mut last_status = None;
+        for _ in 0..150 {
+            if let Some(job) = job_manager.get_job(job_id) {
+                last_status = Some(job.status.clone());
+                if let nexuscore_mcp::utils::jobs::JobStatus::Completed(data) = &job.status {
+                    assert_eq!(data["task_id"], 100);
+                    assert_eq!(data["cape_status"], "reported");
+                    completed = true;
+                    break;
+                } else if let nexuscore_mcp::utils::jobs::JobStatus::Failed(err) = &job.status {
+                    panic!("Job failed: {}", err);
+                }
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+        assert!(
+            completed,
+            "Job did not complete in time. Last status: {:?}",
+            last_status
+        );
+
+        // Cleanup after background job finished
+        let _ = fs::remove_file(dummy_path);
 
         mock_submit.assert_async().await;
         mock_status.assert_async().await;

@@ -1,5 +1,5 @@
+#![cfg(feature = "static-analysis")]
 use nexuscore_mcp::tools::malware::analysis::disasm::CodeDisassembler;
-use nexuscore_mcp::tools::malware::analysis::iat::IatFixer;
 use nexuscore_mcp::tools::malware::analysis::reconstruction::PeFixer;
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;

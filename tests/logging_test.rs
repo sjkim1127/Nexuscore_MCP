@@ -1,7 +1,6 @@
 //! Tests for the logging module
 
 use nexuscore_mcp::utils::logging::{get_metrics, PerfMetrics};
-use serde_json::json;
 
 #[test]
 fn test_perf_metrics_new() {

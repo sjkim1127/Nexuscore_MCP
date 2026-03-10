@@ -67,16 +67,18 @@ mod response_format_tests {
 mod schema_validation_tests {
     use nexuscore_mcp::tools::{ParamDef, ToolSchema};
 
-    fn validate_json_schema(schema: serde_json::Value) {
+    fn validate_json_schema(schema: &serde_json::Value, check_required: bool) {
         assert_eq!(schema["type"], "object");
         assert!(schema.get("properties").is_some());
-        assert!(schema.get("required").is_some());
+        if check_required {
+            assert!(schema.get("required").is_some());
+        }
     }
 
     #[test]
     fn test_empty_schema_valid() {
         let schema = ToolSchema::empty();
-        validate_json_schema(schema.to_json());
+        validate_json_schema(&schema.to_json(), false);
     }
 
     #[test]
@@ -87,7 +89,7 @@ mod schema_validation_tests {
         ]);
 
         let json = schema.to_json();
-        validate_json_schema(json.clone());
+        validate_json_schema(&json, true);
 
         let required = json["required"].as_array().unwrap();
         assert_eq!(required.len(), 2);

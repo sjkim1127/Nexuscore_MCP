@@ -4,6 +4,10 @@ use nexuscore_mcp::tools::malware::defender::DefenderBot;
 use nexuscore_mcp::tools::malware::etw::EtwMonitor;
 #[cfg(feature = "static-analysis")]
 use nexuscore_mcp::tools::malware::yara::YaraScanner;
+#[cfg(any(windows, feature = "static-analysis"))]
+use nexuscore_mcp::tools::Tool;
+#[cfg(feature = "static-analysis")]
+use serde_json::json;
 
 #[cfg(windows)]
 #[tokio::test]

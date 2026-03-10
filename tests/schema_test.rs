@@ -28,7 +28,8 @@ fn test_tool_schema_empty() {
 
     assert_eq!(json["type"], "object");
     assert!(json["properties"].as_object().unwrap().is_empty());
-    assert!(json["required"].as_array().unwrap().is_empty());
+    // required should be missing when there are no required parameters
+    assert!(json.get("required").is_none());
 }
 
 #[test]

@@ -1,3 +1,4 @@
+#![cfg(feature = "dynamic-analysis")]
 use nexuscore_mcp::tools::common::process::{AttachProcess, ResumeProcess, SpawnProcess};
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
@@ -12,7 +13,7 @@ async fn test_spawn_process_metadata() {
 #[tokio::test]
 async fn test_spawn_process_missing_args() {
     let tool = SpawnProcess;
-    let result = tool.execute(json!({})).await;
+    let result: Result<serde_json::Value, anyhow::Error> = tool.execute(json!({})).await;
     assert!(result.is_err());
 }
 

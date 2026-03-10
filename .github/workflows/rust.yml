@@ -61,9 +61,9 @@ jobs:
           $clangInclude = "-I" + $devkitPath.Replace("\", "/")
           echo "BINDGEN_EXTRA_CLANG_ARGS=$clangInclude" >> $env:GITHUB_ENV
 
-      - name: Install capstone dependencies (Ubuntu)
-        if: runner.os == 'Linux' && (contains(matrix.features, 'emulation') || contains(matrix.features, 'all-features'))
-        run: sudo apt-get install -y cmake build-essential python3
+      - name: Install capstone and yara dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential python3 libyara-dev
 
       - name: Run Cargo Check
         run: cargo check ${{ matrix.features }}

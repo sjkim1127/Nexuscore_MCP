@@ -1,10 +1,13 @@
+use nexuscore_mcp::tools::malware::sandbox_submit::CapeSubmitter;
+use nexuscore_mcp::tools::malware::wrappers::external::{CapaTool, DieTool};
+use nexuscore_mcp::tools::Tool;
+use serde_json::json;
+use std::fs;
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use mockito::Server;
-    use nexuscore_mcp::tools::malware::sandbox_submit::CapeSubmitter;
-    use nexuscore_mcp::tools::Tool;
-    use serde_json::json;
-    use std::fs;
 
     #[tokio::test]
     async fn test_cape_submitter_flow() {

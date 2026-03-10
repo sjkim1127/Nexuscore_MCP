@@ -65,7 +65,6 @@ mod response_format_tests {
 /// Schema validation tests
 #[cfg(test)]
 mod schema_validation_tests {
-    use super::*;
     use nexuscore_mcp::tools::{ParamDef, ToolSchema};
 
     fn validate_json_schema(schema: serde_json::Value) {

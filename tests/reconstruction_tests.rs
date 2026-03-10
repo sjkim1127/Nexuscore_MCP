@@ -1,6 +1,6 @@
-use nexuscore_mcp::tools::malware::disasm::CodeDisassembler;
-use nexuscore_mcp::tools::malware::iat::IatFixer;
-use nexuscore_mcp::tools::malware::reconstruction::PeFixer;
+use nexuscore_mcp::tools::malware::analysis::disasm::CodeDisassembler;
+use nexuscore_mcp::tools::malware::analysis::iat::IatFixer;
+use nexuscore_mcp::tools::malware::analysis::reconstruction::PeFixer;
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
 
@@ -9,7 +9,7 @@ async fn test_disassembler_logic() {
     let tool = CodeDisassembler;
 
     // Test Case 1: Simple NOPs (0x90 0x90)
-    let result = tool
+    let result: Result<serde_json::Value, anyhow::Error> = tool
         .execute(json!({"hex_code": "9090", "bitness": 64}))
         .await;
     assert!(result.is_ok(), "Disassembly failed for NOPs");
@@ -22,7 +22,8 @@ async fn test_disassembler_logic() {
     assert_eq!(insts[0]["mnemonic"], "Nop");
 
     // Test Case 2: Invalid Hex
-    let result = tool.execute(json!({"hex_code": "ZZZZ"})).await;
+    let result: Result<serde_json::Value, anyhow::Error> =
+        tool.execute(json!({"hex_code": "ZZZZ"})).await;
     assert!(result.is_err(), "Should catch invalid hex");
 }
 
@@ -33,7 +34,7 @@ async fn test_pe_fixer_logic() {
     // We need a dummy PE file.
     // Creating a minimal PE header in memory or writing to a temp file.
     // For simplicity, we test 'File Not Found' first.
-    let result = tool
+    let result: Result<serde_json::Value, anyhow::Error> = tool
         .execute(json!({"file_path": "non_existent_pe.exe"}))
         .await;
     assert!(result.is_err());

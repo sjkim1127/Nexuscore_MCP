@@ -69,10 +69,10 @@ impl Tool for GuiSpy {
     }
 
     async fn execute(&self, args: Value) -> Result<Value> {
-        let start = Instant::now();
+        let _start = Instant::now();
         let tool_name = self.name();
 
-        let pid = match args["pid"].as_u64() {
+        let _pid = match args["pid"].as_u64() {
             Some(p) => p as u32,
             None => return Ok(StandardResponse::error(tool_name, "Missing pid")),
         };
@@ -80,7 +80,7 @@ impl Tool for GuiSpy {
         #[cfg(all(windows, feature = "dynamic-analysis"))]
         {
             let mut state = EnumState {
-                target_pid: pid,
+                target_pid: _pid,
                 windows: Vec::new(),
             };
             unsafe {
@@ -89,11 +89,11 @@ impl Tool for GuiSpy {
             Ok(StandardResponse::success_timed(
                 tool_name,
                 serde_json::json!({
-                    "pid": pid,
+                    "pid": _pid,
                     "window_count": state.windows.len(),
                     "windows": state.windows
                 }),
-                start,
+                _start,
             ))
         }
 

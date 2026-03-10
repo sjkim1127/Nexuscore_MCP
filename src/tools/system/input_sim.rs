@@ -22,13 +22,13 @@ impl Tool for InputSimulator {
     }
 
     async fn execute(&self, args: Value) -> Result<Value> {
-        let action = args["action"]
+        let _action = args["action"]
             .as_str()
             .ok_or(anyhow::anyhow!("Missing action"))?;
 
         #[cfg(all(windows, feature = "dynamic-analysis"))]
         unsafe {
-            match action {
+            match _action {
                 "mouse_move" => {
                     let x = args["x"].as_i64().unwrap_or(500) as i32;
                     let y = args["y"].as_i64().unwrap_or(500) as i32;

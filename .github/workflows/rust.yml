@@ -37,6 +37,13 @@ jobs:
         shell: powershell
         run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
+      - name: Install YARA (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install yara:x64-windows
+          echo "YARA_LIBRARY_PATH=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\lib" >> $env:GITHUB_ENV
+          echo "YARA_INCLUDE_PATH=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\include" >> $env:GITHUB_ENV
+
       # Setup Frida DevKit only if we might need it (dynamic-analysis or all-features)
       - name: Setup Frida DevKit (Windows)
         if: runner.os == 'Windows' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))

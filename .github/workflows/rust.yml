@@ -48,7 +48,8 @@ jobs:
           $extractRoot = "$env:GITHUB_WORKSPACE\frida-temp"
 
           Write-Host "Downloading Frida DevKit v$frida_version..."
-          Invoke-WebRequest -Uri $url -OutFile $output -UseBasicParsing
+          curl.exe -L $url -o $output
+          if (-not (Test-Path $output)) { throw "Failed to download Frida DevKit" }
           New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
           & "7z" x $output -o"$env:GITHUB_WORKSPACE" -y
           $tarFile = $output.Replace(".xz", "")

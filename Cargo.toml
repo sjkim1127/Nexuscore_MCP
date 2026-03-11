@@ -61,4 +61,4 @@ static-analysis = ["yara", "goblin"]
 observability = ["opentelemetry", "opentelemetry_sdk", "opentelemetry-otlp", "tracing-opentelemetry"]
 
 [dev-dependencies]
-mockito = "1.1.0"
+mockito = "1.7.2"

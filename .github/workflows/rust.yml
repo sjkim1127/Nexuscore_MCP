@@ -61,6 +61,38 @@ jobs:
           $clangInclude = "-I" + $devkitPath.Replace("\", "/")
           echo "BINDGEN_EXTRA_CLANG_ARGS=$clangInclude" >> $env:GITHUB_ENV
 
+      - name: Setup Frida DevKit (Linux)
+        if: runner.os == 'Linux' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
+        run: |
+          frida_version="16.5.11"
+          url="https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-linux-x86_64.tar.xz"
+          output="$GITHUB_WORKSPACE/frida-devkit.tar.xz"
+          extract_root="$GITHUB_WORKSPACE/frida-temp"
+          
+          mkdir -p "$extract_root"
+          curl -L "$url" -o "$output"
+          tar -xJf "$output" -C "$extract_root"
+          
+          echo "FRIDA_CORE_DEVKIT=$extract_root" >> $GITHUB_ENV
+          echo "BINDGEN_EXTRA_CLANG_ARGS=-I$extract_root" >> $GITHUB_ENV
+
+      - name: Setup Frida DevKit (macOS)
+        if: runner.os == 'macOS' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
+        run: |
+          frida_version="16.5.11"
+          arch=$(uname -m)
+          if [ "$arch" = "arm64" ]; then frida_arch="arm64"; else frida_arch="x86_64"; fi
+          url="https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-macos-$frida_arch.tar.xz"
+          output="$GITHUB_WORKSPACE/frida-devkit.tar.xz"
+          extract_root="$GITHUB_WORKSPACE/frida-temp"
+          
+          mkdir -p "$extract_root"
+          curl -L "$url" -o "$output"
+          tar -xJf "$output" -C "$extract_root"
+          
+          echo "FRIDA_CORE_DEVKIT=$extract_root" >> $GITHUB_ENV
+          echo "BINDGEN_EXTRA_CLANG_ARGS=-I$extract_root" >> $GITHUB_ENV
+
       - name: Install capstone and yara dependencies (Ubuntu)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y cmake build-essential python3 libyara-dev

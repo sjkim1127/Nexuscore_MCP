@@ -42,7 +42,7 @@ jobs:
         if: runner.os == 'Windows' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
         shell: powershell
         run: |
-          $frida_version = "16.5.11"
+          $frida_version = "16.5.9"
           $url = "https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-windows-x86_64.tar.xz"
           $output = "$env:GITHUB_WORKSPACE\frida-devkit.tar.xz"
           $extractRoot = "$env:GITHUB_WORKSPACE\frida-temp"
@@ -65,7 +65,7 @@ jobs:
       - name: Setup Frida DevKit (Linux)
         if: runner.os == 'Linux' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
         run: |
-          frida_version="16.5.11"
+          frida_version="16.5.9"
           url="https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-linux-x86_64.tar.xz"
           output="$GITHUB_WORKSPACE/frida-devkit.tar.xz"
           extract_root="$GITHUB_WORKSPACE/frida-temp"
@@ -80,7 +80,7 @@ jobs:
       - name: Setup Frida DevKit (macOS)
         if: runner.os == 'macOS' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
         run: |
-          frida_version="16.5.11"
+          frida_version="16.5.9"
           arch=$(uname -m)
           if [ "$arch" = "arm64" ]; then frida_arch="arm64"; else frida_arch="x86_64"; fi
           url="https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-macos-$frida_arch.tar.xz"

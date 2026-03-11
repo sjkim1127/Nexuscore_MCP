@@ -1,6 +1,6 @@
 #![cfg(feature = "dynamic-analysis")]
 use nexuscore_mcp::tools::common::hook::InstallHook;
-use nexuscore_mcp::tools::common::memory::{ReadMemory, SearchMemory};
+use nexuscore_mcp::tools::common::memory::ReadMemory;
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
 
@@ -13,9 +13,11 @@ async fn test_read_memory_metadata() {
 #[tokio::test]
 async fn test_read_memory_missing_pid() {
     let tool = ReadMemory;
-    let result: Result<serde_json::Value, anyhow::Error> =
-        tool.execute(json!({"address": "0x1234"})).await;
-    assert!(result.is_err());
+    let result = tool.execute(json!({"address": "0x1234"})).await;
+    assert!(result.is_ok());
+    let response = result.unwrap();
+    assert_eq!(response["status"], "error");
+    assert!(response["error"].as_str().unwrap().contains("Missing pid"));
 }
 
 #[tokio::test]

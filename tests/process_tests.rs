@@ -1,5 +1,5 @@
 #![cfg(feature = "dynamic-analysis")]
-use nexuscore_mcp::tools::common::process::{AttachProcess, ResumeProcess, SpawnProcess};
+use nexuscore_mcp::tools::common::process::{AttachProcess, SpawnProcess};
 use nexuscore_mcp::tools::Tool;
 use serde_json::json;
 
@@ -13,8 +13,11 @@ async fn test_spawn_process_metadata() {
 #[tokio::test]
 async fn test_spawn_process_missing_args() {
     let tool = SpawnProcess;
-    let result: Result<serde_json::Value, anyhow::Error> = tool.execute(json!({})).await;
-    assert!(result.is_err());
+    let result = tool.execute(json!({})).await;
+    assert!(result.is_ok());
+    let response = result.unwrap();
+    assert_eq!(response["status"], "error");
+    assert!(response["error"].as_str().unwrap().contains("Missing path"));
 }
 
 #[tokio::test]

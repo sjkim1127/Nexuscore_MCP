@@ -1,6 +1,4 @@
 #[cfg(windows)]
-use nexuscore_mcp::tools::malware::defender::DefenderBot;
-#[cfg(windows)]
 use nexuscore_mcp::tools::malware::etw::EtwMonitor;
 #[cfg(feature = "static-analysis")]
 use nexuscore_mcp::tools::malware::yara::YaraScanner;

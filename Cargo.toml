@@ -44,7 +44,7 @@ hudsucker = "0.24.0"
 
 # Observability (Optional)
 opentelemetry = { version = "0.27", optional = true }
-opentelemetry_sdk = { version = "0.27", optional = true, features = ["rt-tokio"] }
+opentelemetry-sdk = { version = "0.27", optional = true, features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.27", optional = true, features = ["grpc-tonic", "trace"] }
 tracing-opentelemetry = { version = "0.27", optional = true }
 
@@ -58,7 +58,7 @@ full = ["static-analysis", "dynamic-analysis", "emulation"]
 dynamic-analysis = ["frida", "winapi"]
 emulation = ["unicorn-engine", "capstone"]
 static-analysis = ["yara", "goblin"]
-observability = ["opentelemetry", "opentelemetry_sdk", "opentelemetry-otlp", "tracing-opentelemetry"]
+observability = ["opentelemetry", "opentelemetry-sdk", "opentelemetry-otlp", "tracing-opentelemetry"]
 
 [dev-dependencies]
 mockito = "1.1.0"

@@ -10,7 +10,6 @@ use std::time::Instant;
 pub struct InjectFridaScript;
 
 #[async_trait]
-#[async_trait]
 impl Tool for InjectFridaScript {
     fn name(&self) -> &str {
         "inject_frida_script"

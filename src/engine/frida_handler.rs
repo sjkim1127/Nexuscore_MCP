@@ -1,9 +1,8 @@
 use anyhow::Result;
-use frida::{DeviceManager, Frida, Script, Session};
+use frida::{DeviceManager, Frida};
 use std::collections::HashMap;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::sync::mpsc::{channel, Receiver};
+use std::sync::Mutex;
 
 // Global Frida instance for reuse
 static FRIDA: std::sync::OnceLock<Frida> = std::sync::OnceLock::new();
@@ -23,7 +22,6 @@ pub fn get_session_manager() -> &'static Mutex<FridaSessionManager> {
 /// Stored session with message receiver
 struct FridaSession {
     pid: u32,
-    session_handle: u64, // We store the raw handle since Session isn't Send
     message_rx: Receiver<String>,
     active: bool,
 }
@@ -65,17 +63,15 @@ impl FridaSessionManager {
 
         // Attach to process
         let session = device.attach(target_pid)?;
-        let session_handle = session.as_ptr() as u64;
 
         // Create message channel
-        let (tx, rx) = channel::<String>();
+        let (_tx, rx) = channel::<String>();
 
         // Store session
         self.sessions.insert(
             session_id.clone(),
             FridaSession {
                 pid: target_pid,
-                session_handle,
                 message_rx: rx,
                 active: true,
             },
@@ -194,12 +190,11 @@ impl FridaSessionManager {
     pub fn cleanup_all(&mut self) {
         tracing::info!("Cleaning up {} active Frida sessions", self.sessions.len());
         let frida = get_frida();
-        if let Ok(device_manager) = DeviceManager::obtain(frida) {
-            if let Ok(device) = device_manager.get_local_device() {
-                for (id, session) in self.sessions.drain() {
-                    tracing::info!("Killing PID {} from session {}", session.pid, id);
-                    let _ = device.kill(session.pid);
-                }
+        let device_manager = DeviceManager::obtain(frida);
+        if let Ok(device) = device_manager.get_local_device() {
+            for (id, session) in self.sessions.drain() {
+                tracing::info!("Killing PID {} from session {}", session.pid, id);
+                let _: Result<(), _> = device.kill(session.pid);
             }
         }
     }

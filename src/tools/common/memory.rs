@@ -1,6 +1,7 @@
 #![cfg(feature = "dynamic-analysis")]
 use crate::engine::frida_handler;
 use crate::tools::Tool;
+use crate::utils::response::StandardResponse;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
@@ -15,10 +16,15 @@ impl Tool for ReadMemory {
         "Reads memory from a process. Args: pid (number), address (string), size (number, optional)"
     }
     async fn execute(&self, args: Value) -> Result<Value> {
-        let pid = args["pid"].as_u64().ok_or(anyhow::anyhow!("Missing pid"))? as u32;
-        let address = args["address"]
-            .as_str()
-            .ok_or(anyhow::anyhow!("Missing address"))?;
+        let tool_name = self.name();
+        let pid = match args["pid"].as_u64() {
+            Some(p) => p as u32,
+            None => return Ok(StandardResponse::error(tool_name, "Missing pid")),
+        };
+        let address = match args["address"].as_str() {
+            Some(a) => a,
+            None => return Ok(StandardResponse::error(tool_name, "Missing address")),
+        };
         let size = args["size"].as_u64().unwrap_or(256);
 
         // Frida script to read memory
@@ -46,10 +52,15 @@ impl Tool for SearchMemory {
         "Searches memory for a pattern. Args: pid (number), pattern (string)"
     }
     async fn execute(&self, args: Value) -> Result<Value> {
-        let pid = args["pid"].as_u64().ok_or(anyhow::anyhow!("Missing pid"))? as u32;
-        let pattern = args["pattern"]
-            .as_str()
-            .ok_or(anyhow::anyhow!("Missing pattern"))?;
+        let tool_name = self.name();
+        let pid = match args["pid"].as_u64() {
+            Some(p) => p as u32,
+            None => return Ok(StandardResponse::error(tool_name, "Missing pid")),
+        };
+        let pattern = match args["pattern"].as_str() {
+            Some(p) => p,
+            None => return Ok(StandardResponse::error(tool_name, "Missing pattern")),
+        };
 
         let script = format!(
             r#"

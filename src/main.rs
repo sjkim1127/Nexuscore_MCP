@@ -35,12 +35,13 @@ async fn main() -> Result<()> {
             .build()
             .expect("Failed to create OTLP exporter");
 
-        let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
-            .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
-            .with_resource(Resource::new(vec![KeyValue::new(
-                "service.name",
-                "nexuscore-mcp",
-            )]))
+        let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(
+                Resource::builder()
+                    .with_attributes(vec![KeyValue::new("service.name", "nexuscore-mcp")])
+                    .build(),
+            )
             .build();
 
         let tracer = tracer_provider.tracer("nexuscore-mcp");

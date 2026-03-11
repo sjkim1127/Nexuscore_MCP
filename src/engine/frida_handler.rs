@@ -48,7 +48,7 @@ impl FridaSessionManager {
 
         let frida = get_frida();
         let device_manager = DeviceManager::obtain(frida);
-        let device = device_manager.get_local_device()?;
+        let mut device = device_manager.get_local_device()?;
 
         let target_pid = if let Some(path) = spawn_path {
             // Spawn new process
@@ -191,7 +191,8 @@ impl FridaSessionManager {
         tracing::info!("Cleaning up {} active Frida sessions", self.sessions.len());
         let frida = get_frida();
         let device_manager = DeviceManager::obtain(frida);
-        if let Ok(device) = device_manager.get_local_device() {
+        let mut device_res = device_manager.get_local_device();
+        if let Ok(mut device) = device_res.as_mut() {
             for (id, session) in self.sessions.drain() {
                 tracing::info!("Killing PID {} from session {}", session.pid, id);
                 let _: Result<(), _> = device.kill(session.pid);

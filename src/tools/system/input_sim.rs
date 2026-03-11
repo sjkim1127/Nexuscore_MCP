@@ -100,7 +100,7 @@ impl Tool for InputSimulator {
 
                     return Ok(serde_json::json!({ "status": "keypress_sent", "key": "SPACE" }));
                 }
-                _ => return Err(anyhow::anyhow!("Unknown action: {}", action)),
+                _ => return Err(anyhow::anyhow!("Unknown action: {}", _action)),
             }
         }
 

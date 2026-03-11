@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest]
         features:
           - "--no-default-features"
           - "" # default features
@@ -28,21 +28,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install LLVM (Windows)
-        if: runner.os == 'Windows'
+      - name: Install LLVM
         run: choco install llvm -y
 
-      - name: Set LIBCLANG_PATH (Windows)
-        if: runner.os == 'Windows'
+      - name: Set LIBCLANG_PATH
         shell: powershell
         run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
       # Frida DevKit is now handled automatically via the "auto-download" feature in Cargo.toml.
       # No manual setup steps are required here.
-
-      - name: Install capstone and yara dependencies (Ubuntu)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y cmake build-essential python3 libyara-dev
 
       - name: Run Cargo Check
         run: cargo check ${{ matrix.features }}

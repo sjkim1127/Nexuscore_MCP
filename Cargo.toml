@@ -16,7 +16,7 @@ inventory = "0.3.15"
 
 # Security & Analysis
 yara = { version = "0.31", features = ["vendored"], optional = true } 
-frida = { version = "0.17.1", optional = true }
+frida = { version = "0.17.1", features = ["auto-download"], optional = true }
 capstone = { version = "0.14", optional = true }
 iced-x86 = "1.21.0"
 goblin = { version = "0.10.4", optional = true }

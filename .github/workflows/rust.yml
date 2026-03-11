@@ -37,62 +37,8 @@ jobs:
         shell: powershell
         run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-      # Setup Frida DevKit only if we might need it (dynamic-analysis or all-features)
-      - name: Setup Frida DevKit (Windows)
-        if: runner.os == 'Windows' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
-        shell: powershell
-        run: |
-          $frida_version = "16.5.9"
-          $url = "https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-windows-x86_64.tar.xz"
-          $output = "$env:GITHUB_WORKSPACE\frida-devkit.tar.xz"
-          $extractRoot = "$env:GITHUB_WORKSPACE\frida-temp"
-
-          Write-Host "Downloading Frida DevKit v$frida_version..."
-          curl.exe -L $url -o $output
-          if (-not (Test-Path $output)) { throw "Failed to download Frida DevKit" }
-          New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
-          & "7z" x $output -o"$env:GITHUB_WORKSPACE" -y
-          $tarFile = $output.Replace(".xz", "")
-          & "7z" x $tarFile -o"$extractRoot" -y
-
-          $header = Get-ChildItem -Path $extractRoot -Filter "frida-core.h" -Recurse | Select-Object -First 1
-          if ($header) { $devkitPath = $header.Directory.FullName } else { $devkitPath = $extractRoot }
-
-          echo "FRIDA_CORE_DEVKIT=$devkitPath" >> $env:GITHUB_ENV
-          $clangInclude = "-I" + $devkitPath.Replace("\", "/")
-          echo "BINDGEN_EXTRA_CLANG_ARGS=$clangInclude" >> $env:GITHUB_ENV
-
-      - name: Setup Frida DevKit (Linux)
-        if: runner.os == 'Linux' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
-        run: |
-          frida_version="16.5.9"
-          url="https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-linux-x86_64.tar.xz"
-          output="$GITHUB_WORKSPACE/frida-devkit.tar.xz"
-          extract_root="$GITHUB_WORKSPACE/frida-temp"
-          
-          mkdir -p "$extract_root"
-          curl -L "$url" -o "$output"
-          tar -xJf "$output" -C "$extract_root"
-          
-          echo "FRIDA_CORE_DEVKIT=$extract_root" >> $GITHUB_ENV
-          echo "BINDGEN_EXTRA_CLANG_ARGS=-I$extract_root" >> $GITHUB_ENV
-
-      - name: Setup Frida DevKit (macOS)
-        if: runner.os == 'macOS' && (contains(matrix.features, 'dynamic-analysis') || contains(matrix.features, 'all-features'))
-        run: |
-          frida_version="16.5.9"
-          arch=$(uname -m)
-          if [ "$arch" = "arm64" ]; then frida_arch="arm64"; else frida_arch="x86_64"; fi
-          url="https://github.com/frida/frida/releases/download/$frida_version/frida-core-devkit-$frida_version-macos-$frida_arch.tar.xz"
-          output="$GITHUB_WORKSPACE/frida-devkit.tar.xz"
-          extract_root="$GITHUB_WORKSPACE/frida-temp"
-          
-          mkdir -p "$extract_root"
-          curl -L "$url" -o "$output"
-          tar -xJf "$output" -C "$extract_root"
-          
-          echo "FRIDA_CORE_DEVKIT=$extract_root" >> $GITHUB_ENV
-          echo "BINDGEN_EXTRA_CLANG_ARGS=-I$extract_root" >> $GITHUB_ENV
+      # Frida DevKit is now handled automatically via the "auto-download" feature in Cargo.toml.
+      # No manual setup steps are required here.
 
       - name: Install capstone and yara dependencies (Ubuntu)
         if: runner.os == 'Linux'

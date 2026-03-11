@@ -25,22 +25,26 @@ async fn main() -> Result<()> {
     #[cfg(feature = "observability")]
     let otel_layer = {
         use opentelemetry_otlp::WithExportConfig;
+        use opentelemetry::trace::TracerProvider as _;
+        use opentelemetry_sdk::Resource;
+        use opentelemetry::KeyValue;
 
-        let exporter = opentelemetry_otlp::new_exporter()
-            .tonic()
-            .with_endpoint("http://localhost:4317");
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint("http://localhost:4317")
+            .build()
+            .expect("Failed to create OTLP exporter");
 
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(exporter)
-            .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
-                opentelemetry_sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                    "service.name",
-                    "nexuscore-mcp",
-                )]),
-            ))
-            .install_batch(opentelemetry_sdk::runtime::Tokio)
-            .expect("Failed to initialize OTEL pipeline");
+        let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
+            .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+            .with_resource(Resource::new(vec![KeyValue::new(
+                "service.name",
+                "nexuscore-mcp",
+            )]))
+            .build();
+
+        let tracer = tracer_provider.tracer("nexuscore-mcp");
+        opentelemetry::global::set_tracer_provider(tracer_provider);
 
         tracing_opentelemetry::layer().with_tracer(tracer)
     };

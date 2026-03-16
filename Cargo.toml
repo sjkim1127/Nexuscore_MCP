@@ -49,7 +49,7 @@ opentelemetry-otlp = { version = "0.31", optional = true, features = ["grpc-toni
 tracing-opentelemetry = { version = "0.32", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.55"
+winreg = "0.56"
 winapi = { version = "0.3", features = ["winuser", "libloaderapi"], optional = true } # Input sim + GUI spy
 
 [features]

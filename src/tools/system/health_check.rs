@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::time::Instant;
 use tokio::process::Command;
+use tokio::time::{timeout, Duration};
 
 pub struct HealthCheckTool;
 
@@ -27,16 +28,18 @@ impl Tool for HealthCheckTool {
         let tool_name = self.name();
 
         let checks = vec![
-            check_dependency("frida", "frida", &["--version"]).await,
-            check_dependency("cdb", "cdb", &["-?"]).await,
-            check_dependency("diec", "diec", &["--help"]).await,
-            check_dependency("capa", "capa", &["--help"]).await,
-            check_dependency("floss", "floss", &["--help"]).await,
-            check_dependency("handle.exe", "handle.exe", &["-?"]).await,
+            check_dependency("frida", "frida", &["--version"], 3).await,
+            check_dependency("cdb", "cdb", &["-?"], 3).await,
+            check_dependency("diec", "diec", &["--help"], 3).await,
+            check_dependency("capa", "capa", &["--version"], 3).await,
+            check_dependency("floss", "floss", &["--help"], 3).await,
+            check_dependency("handle.exe", "handle.exe", &["-?"], 3).await,
         ];
 
         let vt_key = std::env::var("VIRUSTOTAL_API_KEY").ok();
-        let cape_url = std::env::var("CAPE_URL").ok();
+        let cape_url = std::env::var("CAPE_API_URL")
+            .ok()
+            .or_else(|| std::env::var("CAPE_URL").ok());
         let cape_token = std::env::var("CAPE_API_TOKEN").ok();
 
         let api_keys = serde_json::json!({
@@ -45,25 +48,35 @@ impl Tool for HealthCheckTool {
             "cape_api_token_present": cape_token.as_ref().map(|v| !v.is_empty()).unwrap_or(false)
         });
 
-        let dependency_failures = checks
+        let readiness_failures = checks
             .iter()
-            .filter(|c| !c["available"].as_bool().unwrap_or(false))
+            .filter(|c| !c["readiness_ok"].as_bool().unwrap_or(false))
             .count();
+
+        let cape_ping = if let Some(url) = cape_url.as_deref() {
+            check_http_reachability("cape", url, 3).await
+        } else {
+            serde_json::json!({"name":"cape","enabled":false})
+        };
 
         Ok(StandardResponse::success_timed(
             tool_name,
             serde_json::json!({
-                "healthy": dependency_failures == 0,
-                "dependency_failures": dependency_failures,
+                "healthy": readiness_failures == 0,
+                "dependency_failures": readiness_failures,
                 "dependencies": checks,
                 "api_keys": api_keys,
+                "network": {
+                    "cape_reachable": cape_ping
+                }
             }),
             start,
         ))
     }
 }
 
-async fn check_dependency(name: &str, command: &str, version_args: &[&str]) -> Value {
+async fn check_dependency(name: &str, command: &str, args: &[&str], timeout_secs: u64) -> Value {
+    let start = Instant::now();
     let where_status = Command::new("where")
         .arg(command)
         .output()
@@ -76,32 +89,101 @@ async fn check_dependency(name: &str, command: &str, version_args: &[&str]) -> V
         return serde_json::json!({
             "name": name,
             "available": false,
-            "version": Value::Null
+            "where_ok": false,
+            "readiness_ok": false,
+            "command": format!("{} {}", command, args.join(" ")),
+            "exit_code": Value::Null,
+            "stdout_head": "",
+            "stderr_head": "",
+            "duration_ms": start.elapsed().as_millis() as u64
         });
     }
 
-    let version = Command::new(command)
-        .args(version_args)
-        .output()
-        .await
-        .ok()
-        .and_then(|out| {
-            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !stdout.is_empty() {
-                return Some(stdout.lines().next().unwrap_or_default().to_string());
-            }
-            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            if !stderr.is_empty() {
-                return Some(stderr.lines().next().unwrap_or_default().to_string());
-            }
-            None
-        });
+    let cmdline = format!("{} {}", command, args.join(" "));
+    let output = timeout(
+        Duration::from_secs(timeout_secs),
+        Command::new(command).args(args).output(),
+    )
+    .await;
 
-    serde_json::json!({
-        "name": name,
-        "available": true,
-        "version": version
-    })
+    match output {
+        Ok(Ok(out)) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let exit_code = out.status.code();
+            serde_json::json!({
+                "name": name,
+                "available": true,
+                "where_ok": true,
+                "readiness_ok": out.status.success(),
+                "command": cmdline,
+                "exit_code": exit_code,
+                "stdout_head": truncate_head(&stdout, 1024),
+                "stderr_head": truncate_head(&stderr, 1024),
+                "duration_ms": start.elapsed().as_millis() as u64
+            })
+        }
+        Ok(Err(e)) => serde_json::json!({
+            "name": name,
+            "available": true,
+            "where_ok": true,
+            "readiness_ok": false,
+            "command": cmdline,
+            "exit_code": Value::Null,
+            "stdout_head": "",
+            "stderr_head": format!("{}", e),
+            "duration_ms": start.elapsed().as_millis() as u64
+        }),
+        Err(_) => serde_json::json!({
+            "name": name,
+            "available": true,
+            "where_ok": true,
+            "readiness_ok": false,
+            "command": cmdline,
+            "exit_code": Value::Null,
+            "stdout_head": "",
+            "stderr_head": "timeout",
+            "duration_ms": start.elapsed().as_millis() as u64
+        }),
+    }
+}
+
+fn truncate_head(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
+async fn check_http_reachability(name: &str, url: &str, timeout_secs: u64) -> Value {
+    let start = Instant::now();
+    let client = reqwest::Client::new();
+    let res = timeout(
+        Duration::from_secs(timeout_secs),
+        client.get(url).send(),
+    )
+    .await;
+
+    match res {
+        Ok(Ok(resp)) => serde_json::json!({
+            "name": name,
+            "enabled": true,
+            "reachable": resp.status().is_success() || resp.status().as_u16() < 500,
+            "status": resp.status().as_u16(),
+            "duration_ms": start.elapsed().as_millis() as u64
+        }),
+        Ok(Err(e)) => serde_json::json!({
+            "name": name,
+            "enabled": true,
+            "reachable": false,
+            "error": e.to_string(),
+            "duration_ms": start.elapsed().as_millis() as u64
+        }),
+        Err(_) => serde_json::json!({
+            "name": name,
+            "enabled": true,
+            "reachable": false,
+            "error": "timeout",
+            "duration_ms": start.elapsed().as_millis() as u64
+        }),
+    }
 }
 
 inventory::submit! {

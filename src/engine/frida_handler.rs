@@ -44,9 +44,15 @@ enum FridaCommand {
         session_id: String,
         resp: oneshot::Sender<Result<()>>,
     },
-    GetMessages {
+    GetMessagesSnapshot {
         session_id: String,
+        limit: Option<usize>,
         resp: oneshot::Sender<Result<Vec<String>>>,
+    },
+    DrainMessages {
+        session_id: String,
+        limit: Option<usize>,
+        resp: oneshot::Sender<Result<DrainResult>>,
     },
     Destroy {
         session_id: String,
@@ -58,6 +64,12 @@ enum FridaCommand {
     ListSessions {
         resp: oneshot::Sender<Vec<(String, u32, bool)>>,
     },
+}
+
+#[derive(Debug)]
+pub struct DrainResult {
+    pub messages: Vec<String>,
+    pub dropped_count: u64,
 }
 
 struct ManagedSession<'a> {
@@ -95,6 +107,20 @@ impl MessageBuffer {
 
     fn take_all(&mut self) -> Vec<String> {
         self.queue.drain(..).collect()
+    }
+
+    fn snapshot(&self, limit: Option<usize>) -> Vec<String> {
+        match limit {
+            Some(n) => self.queue.iter().take(n).cloned().collect(),
+            None => self.queue.iter().cloned().collect(),
+        }
+    }
+
+    fn drain(&mut self, limit: Option<usize>) -> Vec<String> {
+        match limit {
+            Some(n) => self.queue.drain(..std::cmp::min(n, self.queue.len())).collect(),
+            None => self.take_all(),
+        }
     }
 }
 
@@ -140,8 +166,12 @@ impl FridaWorker {
                     let res = self.handle_resume(&mut sessions, device_static, session_id);
                     let _ = resp.send(res);
                 }
-                FridaCommand::GetMessages { session_id, resp } => {
-                    let res = self.handle_get_messages(&sessions, session_id);
+                FridaCommand::GetMessagesSnapshot { session_id, limit, resp } => {
+                    let res = self.handle_get_messages_snapshot(&sessions, session_id, limit);
+                    let _ = resp.send(res);
+                }
+                FridaCommand::DrainMessages { session_id, limit, resp } => {
+                    let res = self.handle_drain_messages(&sessions, session_id, limit);
                     let _ = resp.send(res);
                 }
                 FridaCommand::Destroy { session_id, resp } => {
@@ -273,29 +303,43 @@ impl FridaWorker {
         Ok(())
     }
 
-    fn handle_get_messages(
+    fn handle_get_messages_snapshot(
         &self, 
         sessions: &HashMap<String, ManagedSession<'static>>, 
-        session_id: String
+        session_id: String,
+        limit: Option<usize>,
     ) -> Result<Vec<String>> {
         let managed = sessions.get(&session_id)
             .ok_or_else(|| anyhow!("Session not found: {}", session_id))?;
-        let mut msgs = managed.messages.lock().map_err(|_| anyhow!("Failed to lock messages"))?;
+        let msgs = managed
+            .messages
+            .lock()
+            .map_err(|_| anyhow!("Failed to lock messages"))?;
+        Ok(msgs.snapshot(limit))
+    }
+
+    fn handle_drain_messages(
+        &self,
+        sessions: &HashMap<String, ManagedSession<'static>>,
+        session_id: String,
+        limit: Option<usize>,
+    ) -> Result<DrainResult> {
+        let managed = sessions
+            .get(&session_id)
+            .ok_or_else(|| anyhow!("Session not found: {}", session_id))?;
+        let mut msgs = managed
+            .messages
+            .lock()
+            .map_err(|_| anyhow!("Failed to lock messages"))?;
+
         let dropped = msgs.dropped_count;
-        let mut result = msgs.take_all();
-        if dropped > 0 {
-            result.push(
-                serde_json::json!({
-                    "source": "nexuscore",
-                    "kind": "buffer_notice",
-                    "dropped_count": dropped,
-                    "max_buffer": MAX_FRIDA_MESSAGES
-                })
-                .to_string(),
-            );
-            msgs.dropped_count = 0;
-        }
-        Ok(result)
+        let drained = msgs.drain(limit);
+        msgs.dropped_count = 0;
+
+        Ok(DrainResult {
+            messages: drained,
+            dropped_count: dropped,
+        })
     }
 
     fn handle_destroy(
@@ -368,9 +412,33 @@ impl FridaClient {
         resp_rx.await?
     }
 
+    /// Debug/inspection: non-destructive snapshot of current buffer.
     pub async fn get_messages(&self, session_id: String) -> Result<Vec<String>> {
         let (resp_tx, resp_rx) = oneshot::channel();
-        self.tx.send(FridaCommand::GetMessages { session_id, resp: resp_tx }).await?;
+        self.tx
+            .send(FridaCommand::GetMessagesSnapshot {
+                session_id,
+                limit: None,
+                resp: resp_tx,
+            })
+            .await?;
+        resp_rx.await?
+    }
+
+    /// Ingest: destructive drain of buffered messages (prevents double-ingest).
+    pub async fn drain_messages(
+        &self,
+        session_id: String,
+        limit: Option<usize>,
+    ) -> Result<DrainResult> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.tx
+            .send(FridaCommand::DrainMessages {
+                session_id,
+                limit,
+                resp: resp_tx,
+            })
+            .await?;
         resp_rx.await?
     }
 

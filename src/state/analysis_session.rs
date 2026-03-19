@@ -40,6 +40,7 @@ pub enum EventType {
     StatusChanged,
     ProcessSpawned,
     FridaAttached,
+    FridaBatchIngested,
     MonitoringStarted,
     ArtifactAdded,
     NoteAppended,

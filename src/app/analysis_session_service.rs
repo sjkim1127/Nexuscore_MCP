@@ -21,6 +21,14 @@ pub trait AnalysisSessionService {
     fn add_event(&self, session_id: &str, event: AnalysisEvent) -> Result<()>;
     fn add_artifact(&self, session_id: &str, artifact: AnalysisArtifact) -> Result<()>;
     fn append_note(&self, session_id: &str, note: &str) -> Result<()>;
+    fn add_frida_event_batch(
+        &self,
+        session_id: &str,
+        frida_session_id: &str,
+        pid: Option<u32>,
+        raw_events: Vec<String>,
+        dropped_count: u64,
+    ) -> Result<AnalysisArtifact>;
     fn set_failed(&self, session_id: &str, error: &str) -> Result<()>;
     fn complete(&self, session_id: &str) -> Result<()>;
 }
@@ -257,6 +265,125 @@ impl AnalysisSessionService for InMemoryAnalysisSessionService {
         )?;
 
         Ok(())
+    }
+
+    fn add_frida_event_batch(
+        &self,
+        session_id: &str,
+        frida_session_id: &str,
+        pid: Option<u32>,
+        raw_events: Vec<String>,
+        dropped_count: u64,
+    ) -> Result<AnalysisArtifact> {
+        let ts = now_unix();
+
+        let mut parsed: Vec<Value> = Vec::new();
+        let mut invalid_count: u64 = 0;
+
+        let mut from_ts: Option<u64> = None;
+        let mut to_ts: Option<u64> = None;
+
+        let mut severity_counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        let mut category_counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+
+        for raw in &raw_events {
+            match serde_json::from_str::<Value>(raw) {
+                Ok(v) => {
+                    let sev = v
+                        .get("severity")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("info")
+                        .to_string();
+                    let cat = v
+                        .get("category")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+
+                    *severity_counts.entry(sev).or_insert(0) += 1;
+                    *category_counts.entry(cat).or_insert(0) += 1;
+
+                    let candidate_ts = v
+                        .get("ts")
+                        .and_then(|x| x.as_u64())
+                        .or_else(|| v.get("timestamp_ms").and_then(|x| x.as_u64()));
+
+                    if let Some(t) = candidate_ts {
+                        from_ts = Some(from_ts.map(|m| m.min(t)).unwrap_or(t));
+                        to_ts = Some(to_ts.map(|m| m.max(t)).unwrap_or(t));
+                    }
+
+                    parsed.push(v);
+                }
+                Err(_) => invalid_count += 1,
+            }
+        }
+
+        let ingested_count = raw_events.len() as u64;
+        let parsed_count = parsed.len() as u64;
+
+        // v1: inline payload 상한 준수 — 넘치면 앞부분만 저장
+        let mut stored_events = parsed;
+        let mut truncated = false;
+        let original_count = stored_events.len();
+        while let Ok(bytes) = serde_json::to_vec(&stored_events) {
+            if bytes.len() <= ARTIFACT_INLINE_MAX_BYTES {
+                break;
+            }
+            if stored_events.len() <= 1 {
+                truncated = true;
+                stored_events.clear();
+                break;
+            }
+            truncated = true;
+            stored_events.pop();
+        }
+
+        let artifact_id = format!("artifact_{}", Uuid::new_v4());
+        let artifact = AnalysisArtifact {
+            id: artifact_id.clone(),
+            kind: ArtifactKind::FridaEventBatch,
+            created_at: ts,
+            source_tool: "analysis_session_ingest_frida_messages".to_string(),
+            metadata: serde_json::json!({
+                "frida_session_id": frida_session_id,
+                "pid": pid,
+                "ingested_count": ingested_count,
+                "parsed_count": parsed_count,
+                "invalid_count": invalid_count,
+                "from_ts": from_ts,
+                "to_ts": to_ts,
+                "severity_counts": severity_counts,
+                "category_counts": category_counts,
+                "dropped_count": dropped_count,
+                "truncated": truncated,
+                "original_count": original_count,
+                "stored_count": stored_events.len(),
+            }),
+            data_ref: None,
+            inline_data: Some(Value::Array(stored_events)),
+        };
+
+        self.add_artifact(session_id, artifact.clone())?;
+        // v1: timeline 소음 방지 — 요약 이벤트 1개만 기록
+        self.add_event(
+            session_id,
+            AnalysisEvent {
+                timestamp: ts,
+                event_type: EventType::FridaBatchIngested,
+                severity: Severity::Info,
+                details: serde_json::json!({
+                    "frida_session_id": frida_session_id,
+                    "pid": pid,
+                    "ingested_count": ingested_count,
+                    "parsed_count": parsed_count,
+                    "invalid_count": invalid_count,
+                    "dropped_count": dropped_count
+                }),
+            },
+        )?;
+
+        Ok(artifact)
     }
 
     fn set_failed(&self, session_id: &str, error: &str) -> Result<()> {

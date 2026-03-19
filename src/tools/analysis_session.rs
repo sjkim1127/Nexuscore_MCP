@@ -13,6 +13,8 @@ pub struct AnalysisSessionTimeline;
 pub struct AnalysisSessionArtifacts;
 pub struct AnalysisSessionEnd;
 pub struct AnalysisSessionAppendNote;
+#[cfg(feature = "dynamic-analysis")]
+pub struct AnalysisSessionIngestFridaMessages;
 
 #[async_trait]
 impl Tool for AnalysisSessionCreate {
@@ -271,6 +273,106 @@ impl Tool for AnalysisSessionAppendNote {
     }
 }
 
+#[cfg(feature = "dynamic-analysis")]
+#[async_trait]
+impl Tool for AnalysisSessionIngestFridaMessages {
+    fn name(&self) -> &str {
+        "analysis_session_ingest_frida_messages"
+    }
+
+    fn description(&self) -> &str {
+        "Drains Frida messages and ingests them as a FridaEventBatch artifact. Args: analysis_session_id, frida_session_id, limit (optional)"
+    }
+
+    fn schema(&self) -> ToolSchema {
+        ToolSchema::new(vec![
+            ParamDef::new("analysis_session_id", "string", true, "Analysis session ID"),
+            ParamDef::new("frida_session_id", "string", true, "Frida session ID"),
+            ParamDef::new("limit", "number", false, "Max messages to drain and ingest"),
+        ])
+    }
+
+    async fn execute(&self, args: Value) -> Result<Value> {
+        let start = Instant::now();
+        let tool_name = self.name();
+
+        let analysis_session_id = match args["analysis_session_id"].as_str() {
+            Some(v) => v,
+            None => return Ok(StandardResponse::error(tool_name, "Missing analysis_session_id")),
+        };
+        let frida_session_id = match args["frida_session_id"].as_str() {
+            Some(v) => v,
+            None => return Ok(StandardResponse::error(tool_name, "Missing frida_session_id")),
+        };
+        let limit = args["limit"].as_u64().map(|v| v as usize);
+
+        let client = crate::engine::frida_handler::get_frida_client();
+        let drained = match client
+            .drain_messages(frida_session_id.to_string(), limit)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
+        };
+
+        let ingested_count = drained.messages.len() as u64;
+        if ingested_count == 0 {
+            return Ok(StandardResponse::success_timed(
+                tool_name,
+                serde_json::json!({
+                    "analysis_session_id": analysis_session_id,
+                    "frida_session_id": frida_session_id,
+                    "ingested_count": 0,
+                    "parsed_count": 0,
+                    "invalid_count": 0,
+                    "artifact_id": Value::Null,
+                    "from_ts": Value::Null,
+                    "to_ts": Value::Null,
+                    "severity_counts": {},
+                    "category_counts": {},
+                    "dropped_count": drained.dropped_count
+                }),
+                start,
+            ));
+        }
+
+        let svc = InMemoryAnalysisSessionService;
+        let pid = session_store::get(analysis_session_id)
+            .ok()
+            .and_then(|s| s.linked.pid);
+
+        let artifact = match svc.add_frida_event_batch(
+            analysis_session_id,
+            frida_session_id,
+            pid,
+            drained.messages,
+            drained.dropped_count,
+        ) {
+            Ok(a) => a,
+            Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
+        };
+
+        let md = &artifact.metadata;
+        Ok(StandardResponse::success_timed(
+            tool_name,
+            serde_json::json!({
+                "analysis_session_id": analysis_session_id,
+                "frida_session_id": frida_session_id,
+                "ingested_count": md["ingested_count"],
+                "parsed_count": md["parsed_count"],
+                "invalid_count": md["invalid_count"],
+                "artifact_id": artifact.id,
+                "from_ts": md["from_ts"],
+                "to_ts": md["to_ts"],
+                "severity_counts": md["severity_counts"],
+                "category_counts": md["category_counts"],
+                "dropped_count": md["dropped_count"]
+            }),
+            start,
+        ))
+    }
+}
+
 inventory::submit! {
     crate::tools::ToolRegistration::new(|| std::sync::Arc::new(AnalysisSessionCreate))
 }
@@ -289,4 +391,9 @@ inventory::submit! {
 
 inventory::submit! {
     crate::tools::ToolRegistration::new(|| std::sync::Arc::new(AnalysisSessionAppendNote))
+}
+
+#[cfg(feature = "dynamic-analysis")]
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(AnalysisSessionIngestFridaMessages))
 }

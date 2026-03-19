@@ -39,7 +39,7 @@ impl Tool for InstallHook {
             target, target, target, code
         );
 
-        frida_handler::execute_script(pid, &script)?;
+        frida_handler::execute_script(pid, &script).await?;
 
         Ok(serde_json::json!({ "status": "hook_installed", "target": target }))
     }

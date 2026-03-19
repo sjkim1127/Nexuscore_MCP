@@ -1,5 +1,5 @@
 #![cfg(feature = "dynamic-analysis")]
-use crate::engine::frida_handler::get_session_manager;
+use crate::engine::frida_handler::get_frida_client;
 use crate::tools::{ParamDef, Tool, ToolSchema};
 use crate::utils::response::StandardResponse;
 use anyhow::Result;
@@ -33,14 +33,28 @@ impl Tool for FridaSessionCreate {
         let pid = args["pid"].as_u64().map(|p| p as u32);
         let path = args["path"].as_str();
 
-        let mut manager = get_session_manager().lock().unwrap();
+        let client = get_frida_client();
 
-        let session_id = match manager.create_session(pid, path) {
-            Ok(id) => id,
-            Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
+        let session_id = if let Some(p) = pid {
+            match client.attach(p).await {
+                Ok(id) => id,
+                Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
+            }
+        } else if let Some(p) = path {
+            match client.spawn(p.to_string()).await {
+                Ok(id) => id,
+                Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
+            }
+        } else {
+            return Ok(StandardResponse::error(tool_name, "Provide pid or path"));
         };
 
-        let target_pid = manager.get_pid(&session_id).unwrap_or(0);
+        // Get target PID from session list
+        let sessions = client.list_sessions().await?;
+        let target_pid = sessions.iter()
+            .find(|(id, _, _)| id == &session_id)
+            .map(|(_, p, _)| *p)
+            .unwrap_or(0);
 
         Ok(StandardResponse::success_timed(
             tool_name,
@@ -86,9 +100,9 @@ impl Tool for FridaSessionInject {
             None => return Ok(StandardResponse::error(tool_name, "Missing script")),
         };
 
-        let mut manager = get_session_manager().lock().unwrap();
+        let client = get_frida_client();
 
-        if let Err(e) = manager.inject_script(session_id, script) {
+        if let Err(e) = client.inject(session_id.to_string(), script.to_string()).await {
             return Ok(StandardResponse::error(tool_name, &e.to_string()));
         }
 
@@ -133,9 +147,9 @@ impl Tool for FridaSessionResume {
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
 
-        let manager = get_session_manager().lock().unwrap();
+        let client = get_frida_client();
 
-        if let Err(e) = manager.resume_process(session_id) {
+        if let Err(e) = client.resume(session_id.to_string()).await {
             return Ok(StandardResponse::error(tool_name, &e.to_string()));
         }
 
@@ -178,17 +192,20 @@ impl Tool for FridaSessionMessages {
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
 
-        let mut manager = get_session_manager().lock().unwrap();
-        let messages = manager.get_messages(session_id);
-
-        Ok(StandardResponse::success(
-            tool_name,
-            serde_json::json!({
-                "session_id": session_id,
-                "message_count": messages.len(),
-                "messages": messages
-            }),
-        ))
+        let client = get_frida_client();
+        match client.get_messages(session_id.to_string()).await {
+            Ok(messages) => {
+                Ok(StandardResponse::success(
+                    tool_name,
+                    serde_json::json!({
+                        "session_id": session_id,
+                        "message_count": messages.len(),
+                        "messages": messages
+                    }),
+                ))
+            }
+            Err(e) => Ok(StandardResponse::error(tool_name, &e.to_string())),
+        }
     }
 }
 
@@ -221,8 +238,10 @@ impl Tool for FridaSessionDestroy {
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
 
-        let mut manager = get_session_manager().lock().unwrap();
-        manager.destroy_session(session_id)?;
+        let client = get_frida_client();
+        if let Err(e) = client.destroy_session(session_id.to_string()).await {
+            return Ok(StandardResponse::error(tool_name, &e.to_string()));
+        }
 
         Ok(StandardResponse::success(
             tool_name,
@@ -253,26 +272,30 @@ impl Tool for FridaSessionList {
     async fn execute(&self, _args: Value) -> Result<Value> {
         let tool_name = self.name();
 
-        let manager = get_session_manager().lock().unwrap();
-        let sessions: Vec<_> = manager
-            .list_sessions()
-            .into_iter()
-            .map(|(id, pid, active)| {
-                serde_json::json!({
-                    "session_id": id,
-                    "pid": pid,
-                    "active": active
-                })
-            })
-            .collect();
+        let client = get_frida_client();
+        match client.list_sessions().await {
+            Ok(sessions_list) => {
+                let sessions: Vec<_> = sessions_list
+                    .into_iter()
+                    .map(|(id, pid, active)| {
+                        serde_json::json!({
+                            "session_id": id,
+                            "pid": pid,
+                            "active": active
+                        })
+                    })
+                    .collect();
 
-        Ok(StandardResponse::success(
-            tool_name,
-            serde_json::json!({
-                "sessions": sessions,
-                "count": sessions.len()
-            }),
-        ))
+                Ok(StandardResponse::success(
+                    tool_name,
+                    serde_json::json!({
+                        "sessions": sessions,
+                        "count": sessions.len()
+                    }),
+                ))
+            }
+            Err(e) => Ok(StandardResponse::error(tool_name, &e.to_string())),
+        }
     }
 }
 

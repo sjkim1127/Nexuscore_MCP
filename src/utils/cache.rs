@@ -1,5 +1,6 @@
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::{self, Read};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Persistent cache for external tool results using sled
@@ -60,11 +61,20 @@ impl ResultCache {
     }
 }
 
-/// Calculate SHA256 hash of a file
-pub fn file_hash(path: &str) -> Result<String, std::io::Error> {
-    let content = fs::read(path)?;
+/// Calculate SHA256 hash of a file using streaming to avoid large memory allocations
+pub fn file_hash(path: &str) -> Result<String, io::Error> {
+    let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    hasher.update(&content);
+    let mut buffer = [0u8; 65536]; // 64KB buffer
+    
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    
     let result = hasher.finalize();
     Ok(hex::encode(result))
 }

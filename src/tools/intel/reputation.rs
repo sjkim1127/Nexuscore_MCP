@@ -14,7 +14,7 @@ impl Tool for ReputationChecker {
         "check_reputation"
     }
     fn description(&self) -> &str {
-        "Checks reputation via VirusTotal/AbuseIPDB. Args: type (hash/ip/domain), value"
+        "Checks reputation via VirusTotal. Args: type (hash/ip/domain), value"
     }
     fn schema(&self) -> ToolSchema {
         ToolSchema::new(vec![
@@ -36,7 +36,9 @@ impl Tool for ReputationChecker {
             None => return Ok(StandardResponse::error(tool_name, "Missing value")),
         };
 
-        let vt_key = env::var("VT_API_KEY").ok();
+        let vt_key = env::var("VT_API_KEY")
+            .ok()
+            .or_else(|| env::var("VIRUSTOTAL_API_KEY").ok());
         let mut results = serde_json::Map::new();
         results.insert("query_type".to_string(), serde_json::json!(query_type));
         results.insert("query_value".to_string(), serde_json::json!(value));
@@ -47,7 +49,7 @@ impl Tool for ReputationChecker {
         } else {
             results.insert(
                 "virustotal".to_string(),
-                serde_json::json!({"status": "disabled", "reason": "VT_API_KEY not set"}),
+                serde_json::json!({"status": "disabled", "reason": "VT_API_KEY or VIRUSTOTAL_API_KEY not set"}),
             );
         }
 

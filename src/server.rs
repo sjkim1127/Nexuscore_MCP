@@ -23,6 +23,63 @@ impl NexusCoreServer {
     pub fn print_tool_count(&self) {
         tracing::info!("NexusCore loaded {} tools", self.tools.len());
     }
+
+    /// Internal tool execution logic for testing and protocol mapping
+    pub async fn call_tool_internal(
+        &self,
+        name: String,
+        args: Value,
+    ) -> Result<CallToolResult, rmcp::model::ErrorData> {
+        let tool = match self.tools.get(&name) {
+            Some(tool) => tool,
+            None => {
+                return Ok(CallToolResult {
+                    content: vec![Content::text(format!("Error: Unknown tool '{}'", name))],
+                    is_error: Some(true),
+                    meta: None,
+                    structured_content: None,
+                });
+            }
+        };
+
+        match tool.execute(args).await {
+            Ok(result) => {
+                let normalized = Self::normalize_tool_response(&name, result);
+                let is_error = normalized.get("status")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == "error")
+                    .unwrap_or(false);
+
+                Ok(CallToolResult {
+                    content: vec![Content::text(normalized.to_string())],
+                    is_error: Some(is_error),
+                    meta: None,
+                    structured_content: Some(normalized),
+                })
+            }
+            Err(e) => {
+                let error_json = crate::utils::response::StandardResponse::error(&name, &e.to_string());
+                Ok(CallToolResult {
+                    content: vec![Content::text(error_json.to_string())],
+                    is_error: Some(true),
+                    meta: None,
+                    structured_content: Some(error_json),
+                })
+            }
+        }
+    }
+
+    fn normalize_tool_response(tool_name: &str, result: Value) -> Value {
+        let has_envelope = result.get("status").is_some()
+            && result.get("data").is_some()
+            && result.get("metadata").is_some();
+
+        if has_envelope {
+            return result;
+        }
+
+        crate::utils::response::StandardResponse::success(tool_name, result)
+    }
 }
 
 impl ServerHandler for NexusCoreServer {
@@ -65,38 +122,8 @@ impl ServerHandler for NexusCoreServer {
         let name = param.name.to_string();
         let args_map = param.arguments.unwrap_or_else(serde_json::Map::new);
         let args = Value::Object(args_map);
-        let tool = match self.tools.get(&name) {
-            Some(tool) => tool,
-            None => {
-                return Ok(CallToolResult {
-                    content: vec![Content::text(format!("Error: Unknown tool '{}'", name))],
-                    is_error: Some(true),
-                    meta: None,
-                    structured_content: None,
-                });
-            }
-        };
-
-        match tool.execute(args).await {
-            Ok(result) => Ok(CallToolResult {
-                content: vec![Content::text(result.to_string())],
-                is_error: Some(false),
-                meta: None,
-                structured_content: None,
-            }),
-            Err(e) => {
-                let error_json = serde_json::json!({
-                    "error_type": "ToolExecutionFailed",
-                    "message": e.to_string()
-                });
-                Ok(CallToolResult {
-                    content: vec![Content::text(error_json.to_string())],
-                    is_error: Some(true),
-                    meta: None,
-                    structured_content: None,
-                })
-            }
-        }
+        
+        self.call_tool_internal(name, args).await
     }
 
     // --- Resources Support ---
@@ -126,8 +153,10 @@ impl ServerHandler for NexusCoreServer {
 
         let content = match uri.as_str() {
             "mcp://logs/latest" => {
-                let log_path = "logs/nexuscore.json";
-                std::fs::read_to_string(log_path).unwrap_or_else(|_| "[]".to_string())
+                match find_latest_log("logs", "nexuscore.json") {
+                    Some(path) => std::fs::read_to_string(path).unwrap_or_else(|_| "[]".to_string()),
+                    None => "[]".to_string()
+                }
             }
             "mcp://cache/stats" => serde_json::json!({
                 "engine": "sled",
@@ -271,7 +300,7 @@ pub async fn run_server() -> Result<()> {
             #[cfg(feature = "dynamic-analysis")]
             {
                 tracing::info!("Cleaning up Frida sessions...");
-                crate::engine::frida_handler::get_session_manager().lock().unwrap().cleanup_all();
+                let _ = crate::engine::frida_handler::get_frida_client().cleanup_all().await;
             }
 
             #[cfg(windows)]
@@ -284,3 +313,32 @@ pub async fn run_server() -> Result<()> {
 
     Ok(())
 }
+
+/// Helper to find the latest log file matching a prefix
+fn find_latest_log(dir: &str, prefix: &str) -> Option<String> {
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut latest_file = None;
+    let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+
+    for entry in entries {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.starts_with(prefix) {
+                        if let Ok(metadata) = entry.metadata() {
+                            if let Ok(modified) = metadata.modified() {
+                                if modified > latest_time {
+                                    latest_time = modified;
+                                    latest_file = Some(path.to_string_lossy().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    latest_file
+}
+

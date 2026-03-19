@@ -37,7 +37,7 @@ impl Tool for ReadMemory {
             address, size
         );
 
-        frida_handler::execute_script(pid, &script)?;
+        frida_handler::execute_script(pid, &script).await?;
         Ok(serde_json::json!({ "status": "reading", "pid": pid, "address": address }))
     }
 }
@@ -79,7 +79,7 @@ impl Tool for SearchMemory {
             pattern
         );
 
-        frida_handler::execute_script(pid, &script)?;
+        frida_handler::execute_script(pid, &script).await?;
 
         Ok(serde_json::json!({ "status": "scanning", "pid": pid }))
     }

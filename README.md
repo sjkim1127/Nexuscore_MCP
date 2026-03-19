@@ -67,7 +67,7 @@ graph TD
 
 | Tool | Description | Key Tech |
 |------|-------------|----------|
-| **`spawn_process`** | Spawns malware in **suspended state** with Stealth Unpacker. | Frida |
+| **`spawn_process`** | Spawns process via Frida spawn, optionally injects stealth hooks. Use `resume_process` to continue. | Frida |
 | **`api_monitor`** | Monitors Windows API calls (Registry, Network, Files). | Frida |
 | **`dump_ssl_keys`** | Hooks libraries to dump keys for HTTPS decryption. | Frida |
 | **`generate_yara`** | Auto-generates initial YARA signatures. | Native |
@@ -84,7 +84,7 @@ graph TD
 | **`session_end`** | Terminate debug session. |
 | **`debug_help`** | Common cdb.exe command reference. |
 
-### � Frida Session Management (`src/tools/common/frida_session/`)
+### 🔗 Frida Session Management (`src/tools/common/frida_session.rs`)
 
 | Tool | Description |
 |------|-------------|
@@ -93,7 +93,7 @@ graph TD
 | **`frida_session_messages`** | Get collected messages from hooks. |
 | **`frida_session_destroy`** | Release session resources. |
 
-### � System & Metrics
+### 🧰 System & Metrics
 
 | Tool | Description |
 |------|-------------|
@@ -294,7 +294,7 @@ Claude: The file is detected as:
 
 Let me check for malware capabilities:
 
-[Claude calls capa_tool]
+[Claude calls capa_scan]
 
 Claude: CAPA detected the following capabilities:
 - ✅ Network communication (HTTP)
@@ -386,14 +386,14 @@ Should I resume the process and monitor its behavior?
 
 ```
 
-### Example 3: Unpacking and Dumping
+### Example 3: Unpacking and Dumping (experimental)
 ```
 
 You: Can you unpack this Themida-protected binary?
 
 Claude: I'll attempt to find the Original Entry Point (OEP).
 
-[Claude calls spawn_process, then find_oep]
+[Claude calls spawn_process, then find_oep (experimental)]
 
 Claude: OEP Analysis:
 
@@ -544,7 +544,7 @@ Detects packers, compilers, and protectors using Detect It Easy.
 }
 ```
 
-#### `capa_tool`
+#### `capa_scan`
 
 Analyzes malware capabilities using CAPA.
 
@@ -568,7 +568,7 @@ Analyzes malware capabilities using CAPA.
 }
 ```
 
-#### `floss_tool`
+#### `floss_strings`
 
 Extracts obfuscated strings using FLOSS.
 
@@ -582,7 +582,7 @@ Extracts obfuscated strings using FLOSS.
 
 ### Dynamic Analysis Tools
 
-#### `find_oep`
+#### `find_oep` (experimental)
 
 Finds the Original Entry Point of packed executables.
 
@@ -719,14 +719,13 @@ Submits a sample to CAPEv2 sandbox.
 }
 ```
 
-**Response:**
+**Response (asynchronous job):**
 
 ```json
 {
-  "task_id": 12345,
-  "status": "completed",
-  "score": 8.5,
-  "signatures": ["ransomware", "persistence"]
+  "job_id": "job_...",
+  "status": "Processing in background. Use check_job_status tool to poll.",
+  "tool": "cape_submit"
 }
 ```
 

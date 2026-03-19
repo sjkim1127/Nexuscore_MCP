@@ -47,10 +47,11 @@ impl CapeClient {
 
         // CAPEv2 API Call
         let url = format!("{}/tasks/create/file/", self.base_url);
-        let resp = self
-            .client
-            .post(&url)
-            // .header("Authorization", format!("Token {}", self.api_token)) // Uncomment if needed
+        let mut request = self.client.post(&url);
+        if !self.api_token.is_empty() {
+            request = request.header("Authorization", format!("Token {}", self.api_token));
+        }
+        let resp = request
             .multipart(form)
             .send()
             .await

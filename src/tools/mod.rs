@@ -7,7 +7,6 @@ pub mod intel;
 pub mod malware;
 pub mod network;
 pub mod system;
-#[cfg(feature = "dynamic-analysis")]
 pub mod analysis_session;
 
 /// Parameter definition for tool schema

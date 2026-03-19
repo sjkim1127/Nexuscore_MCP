@@ -1,67 +1,18 @@
-#![cfg(feature = "dynamic-analysis")]
-
+use crate::app::analysis_session_service::{AnalysisSessionService, InMemoryAnalysisSessionService};
+use crate::state::session_store;
 use crate::tools::{ParamDef, Tool, ToolSchema};
 use crate::utils::response::StandardResponse;
 use anyhow::Result;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use uuid::Uuid;
-
-static ANALYSIS_STORE: OnceLock<Mutex<HashMap<String, AnalysisSession>>> = OnceLock::new();
-
-fn store() -> &'static Mutex<HashMap<String, AnalysisSession>> {
-    ANALYSIS_STORE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum AnalysisStatus {
-    Created,
-    Running,
-    Completed,
-    Failed,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct AnalysisEvent {
-    timestamp: u64,
-    event: String,
-    details: Value,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct AnalysisArtifact {
-    kind: String,
-    value: Value,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct AnalysisSession {
-    session_id: String,
-    sample_path: String,
-    status: AnalysisStatus,
-    created_at: u64,
-    updated_at: u64,
-    timeline: Vec<AnalysisEvent>,
-    artifacts: Vec<AnalysisArtifact>,
-}
+use std::time::Instant;
 
 pub struct AnalysisSessionCreate;
 pub struct AnalysisSessionStatus;
 pub struct AnalysisSessionTimeline;
 pub struct AnalysisSessionArtifacts;
 pub struct AnalysisSessionEnd;
+pub struct AnalysisSessionAppendNote;
 
 #[async_trait]
 impl Tool for AnalysisSessionCreate {
@@ -89,34 +40,17 @@ impl Tool for AnalysisSessionCreate {
             Some(v) => v.to_string(),
             None => return Ok(StandardResponse::error(tool_name, "Missing sample_path")),
         };
-
-        let session_id = format!("analysis_{}", Uuid::new_v4());
-        let ts = now_unix();
-
-        let session = AnalysisSession {
-            session_id: session_id.clone(),
-            sample_path: sample_path.clone(),
-            status: AnalysisStatus::Created,
-            created_at: ts,
-            updated_at: ts,
-            timeline: vec![AnalysisEvent {
-                timestamp: ts,
-                event: "session_created".to_string(),
-                details: serde_json::json!({ "sample_path": sample_path }),
-            }],
-            artifacts: vec![],
+        let svc = InMemoryAnalysisSessionService;
+        let session = match svc.create_session(&sample_path) {
+            Ok(s) => s,
+            Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
         };
-
-        let mut guard = store()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock analysis store"))?;
-        guard.insert(session_id.clone(), session);
 
         Ok(StandardResponse::success_timed(
             tool_name,
             serde_json::json!({
-                "session_id": session_id,
-                "status": "created"
+                "session_id": session.session_id,
+                "status": session.status
             }),
             start,
         ))
@@ -148,24 +82,10 @@ impl Tool for AnalysisSessionStatus {
             Some(v) => v,
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
-
-        let mut guard = store()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock analysis store"))?;
-        let session = match guard.get_mut(session_id) {
-            Some(s) => s,
-            None => return Ok(StandardResponse::error(tool_name, "Session not found")),
+        let session = match session_store::get(session_id) {
+            Ok(s) => s,
+            Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
         };
-
-        if matches!(session.status, AnalysisStatus::Created) {
-            session.status = AnalysisStatus::Running;
-            session.updated_at = now_unix();
-            session.timeline.push(AnalysisEvent {
-                timestamp: session.updated_at,
-                event: "session_running".to_string(),
-                details: serde_json::json!({}),
-            });
-        }
 
         Ok(StandardResponse::success(
             tool_name,
@@ -174,7 +94,9 @@ impl Tool for AnalysisSessionStatus {
                 "sample_path": session.sample_path,
                 "status": session.status,
                 "created_at": session.created_at,
-                "updated_at": session.updated_at
+                "updated_at": session.updated_at,
+                "last_error": session.last_error,
+                "linked": session.linked
             }),
         ))
     }
@@ -204,13 +126,9 @@ impl Tool for AnalysisSessionTimeline {
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
         let limit = args["limit"].as_u64().unwrap_or(100) as usize;
-
-        let guard = store()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock analysis store"))?;
-        let session = match guard.get(session_id) {
-            Some(s) => s,
-            None => return Ok(StandardResponse::error(tool_name, "Session not found")),
+        let session = match session_store::get(session_id) {
+            Ok(s) => s,
+            Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
         };
 
         let mut timeline = session.timeline.clone();
@@ -254,13 +172,9 @@ impl Tool for AnalysisSessionArtifacts {
             Some(v) => v,
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
-
-        let guard = store()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock analysis store"))?;
-        let session = match guard.get(session_id) {
-            Some(s) => s,
-            None => return Ok(StandardResponse::error(tool_name, "Session not found")),
+        let session = match session_store::get(session_id) {
+            Ok(s) => s,
+            Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
         };
 
         Ok(StandardResponse::success(
@@ -299,28 +213,59 @@ impl Tool for AnalysisSessionEnd {
             Some(v) => v,
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
-
-        let mut guard = store()
-            .lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock analysis store"))?;
-        let session = match guard.get_mut(session_id) {
-            Some(s) => s,
-            None => return Ok(StandardResponse::error(tool_name, "Session not found")),
-        };
-
-        session.status = AnalysisStatus::Completed;
-        session.updated_at = now_unix();
-        session.timeline.push(AnalysisEvent {
-            timestamp: session.updated_at,
-            event: "session_completed".to_string(),
-            details: serde_json::json!({}),
-        });
+        let svc = InMemoryAnalysisSessionService;
+        if let Err(e) = svc.complete(session_id) {
+            return Ok(StandardResponse::error(tool_name, &e.to_string()));
+        }
 
         Ok(StandardResponse::success(
             tool_name,
             serde_json::json!({
                 "session_id": session_id,
                 "status": "completed"
+            }),
+        ))
+    }
+}
+
+#[async_trait]
+impl Tool for AnalysisSessionAppendNote {
+    fn name(&self) -> &str {
+        "analysis_session_append_note"
+    }
+
+    fn description(&self) -> &str {
+        "Append a human-readable note to the session timeline and artifacts. Args: session_id, note"
+    }
+
+    fn schema(&self) -> ToolSchema {
+        ToolSchema::new(vec![
+            ParamDef::new("session_id", "string", true, "Analysis session ID"),
+            ParamDef::new("note", "string", true, "Note text to append"),
+        ])
+    }
+
+    async fn execute(&self, args: Value) -> Result<Value> {
+        let tool_name = self.name();
+        let session_id = match args["session_id"].as_str() {
+            Some(v) => v,
+            None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
+        };
+        let note = match args["note"].as_str() {
+            Some(v) => v,
+            None => return Ok(StandardResponse::error(tool_name, "Missing note")),
+        };
+
+        let svc = InMemoryAnalysisSessionService;
+        if let Err(e) = svc.append_note(session_id, note) {
+            return Ok(StandardResponse::error(tool_name, &e.to_string()));
+        }
+
+        Ok(StandardResponse::success(
+            tool_name,
+            serde_json::json!({
+                "session_id": session_id,
+                "appended": true
             }),
         ))
     }
@@ -340,4 +285,8 @@ inventory::submit! {
 }
 inventory::submit! {
     crate::tools::ToolRegistration::new(|| std::sync::Arc::new(AnalysisSessionEnd))
+}
+
+inventory::submit! {
+    crate::tools::ToolRegistration::new(|| std::sync::Arc::new(AnalysisSessionAppendNote))
 }

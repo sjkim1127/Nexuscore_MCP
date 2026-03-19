@@ -23,6 +23,12 @@ impl Tool for FridaSessionCreate {
         ToolSchema::new(vec![
             ParamDef::new("pid", "number", false, "Process ID to attach to"),
             ParamDef::new("path", "string", false, "Path to executable to spawn"),
+            ParamDef::new(
+                "analysis_session_id",
+                "string",
+                false,
+                "Optional analysis session ID to link this frida session to",
+            ),
         ])
     }
 
@@ -32,6 +38,7 @@ impl Tool for FridaSessionCreate {
 
         let pid = args["pid"].as_u64().map(|p| p as u32);
         let path = args["path"].as_str();
+        let analysis_session_id = args["analysis_session_id"].as_str().map(|s| s.to_string());
 
         let client = get_frida_client();
 
@@ -56,12 +63,19 @@ impl Tool for FridaSessionCreate {
             .map(|(_, p, _)| *p)
             .unwrap_or(0);
 
+        if let Some(aid) = analysis_session_id.as_deref() {
+            use crate::app::analysis_session_service::{AnalysisSessionService, InMemoryAnalysisSessionService};
+            let svc = InMemoryAnalysisSessionService;
+            let _ = svc.link_frida(aid, &session_id, if target_pid == 0 { None } else { Some(target_pid) });
+        }
+
         Ok(StandardResponse::success_timed(
             tool_name,
             serde_json::json!({
                 "session_id": session_id,
                 "pid": target_pid,
-                "mode": if path.is_some() { "spawned" } else { "attached" }
+                "mode": if path.is_some() { "spawned" } else { "attached" },
+                "analysis_session_id": analysis_session_id
             }),
             start,
         ))

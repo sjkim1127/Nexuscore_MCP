@@ -72,6 +72,12 @@ impl Tool for SpawnProcess {
                 false,
                 "Enable stealth mode (default: true)",
             ),
+            ParamDef::new(
+                "analysis_session_id",
+                "string",
+                false,
+                "Optional analysis session ID to link spawned pid to",
+            ),
         ])
     }
 
@@ -84,6 +90,7 @@ impl Tool for SpawnProcess {
             None => return Ok(StandardResponse::error(tool_name, "Missing path")),
         };
         let stealth = args["stealth"].as_bool().unwrap_or(true);
+        let analysis_session_id = args["analysis_session_id"].as_str().map(|s| s.to_string());
 
         let engine = FridaHandler::new();
         let mut script_content = String::new();
@@ -93,15 +100,25 @@ impl Tool for SpawnProcess {
         }
 
         match engine.spawn_and_instrument(path, &script_content).await {
-            Ok(pid) => Ok(StandardResponse::success_timed(
-                tool_name,
-                serde_json::json!({
-                    "pid": pid,
-                    "path": path,
-                    "stealth_mode": stealth
-                }),
-                start,
-            )),
+            Ok(pid) => {
+                if let Some(session_id) = analysis_session_id.as_deref() {
+                    use crate::app::analysis_session_service::{
+                        AnalysisSessionService, InMemoryAnalysisSessionService,
+                    };
+                    let svc = InMemoryAnalysisSessionService;
+                    let _ = svc.link_process(session_id, pid);
+                }
+                Ok(StandardResponse::success_timed(
+                    tool_name,
+                    serde_json::json!({
+                        "pid": pid,
+                        "path": path,
+                        "stealth_mode": stealth,
+                        "analysis_session_id": analysis_session_id
+                    }),
+                    start,
+                ))
+            }
             Err(e) => Ok(StandardResponse::error(tool_name, &e.to_string())),
         }
     }

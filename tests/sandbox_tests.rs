@@ -56,7 +56,9 @@ mod tests {
             result.err()
         );
         let output = result.unwrap();
-        let job_id = output["job_id"].as_str().expect("job_id missing");
+        let job_id = output["data"]["job_id"]
+            .as_str()
+            .expect("job_id missing");
 
         let job_manager = nexuscore_mcp::utils::jobs::get_job_manager();
         let mut completed = false;

@@ -1,10 +1,21 @@
 use crate::tools::{ParamDef, Tool, ToolSchema};
 use crate::utils::response::StandardResponse;
+use crate::app::analysis_session_service::{AnalysisSessionService, InMemoryAnalysisSessionService};
+use crate::state::analysis_session::{AnalysisArtifact, ArtifactKind, AnalysisEvent, EventType, Severity};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::env;
 use std::time::Instant;
+use uuid::Uuid;
+
+fn now_unix() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 pub struct ReputationChecker;
 
@@ -20,6 +31,12 @@ impl Tool for ReputationChecker {
         ToolSchema::new(vec![
             ParamDef::new("type", "string", true, "Query type: hash, ip, or domain"),
             ParamDef::new("value", "string", true, "Value to check"),
+            ParamDef::new(
+                "analysis_session_id",
+                "string",
+                false,
+                "Optional analysis session ID to attach result to",
+            ),
         ])
     }
 
@@ -35,6 +52,7 @@ impl Tool for ReputationChecker {
             Some(v) => v,
             None => return Ok(StandardResponse::error(tool_name, "Missing value")),
         };
+        let analysis_session_id = args["analysis_session_id"].as_str().map(|s| s.to_string());
 
         let vt_key = env::var("VT_API_KEY")
             .ok()
@@ -50,6 +68,56 @@ impl Tool for ReputationChecker {
             results.insert(
                 "virustotal".to_string(),
                 serde_json::json!({"status": "disabled", "reason": "VT_API_KEY or VIRUSTOTAL_API_KEY not set"}),
+            );
+        }
+
+        if let Some(session_id) = analysis_session_id.as_deref() {
+            let svc = InMemoryAnalysisSessionService;
+            let ts = now_unix();
+
+            let provider_statuses = serde_json::json!({
+                "virustotal": if results.get("virustotal").and_then(|v| v.get("status")).is_some() { "enabled" } else { "disabled" }
+            });
+
+            // inline_data: provider별 요약만 (원본 전체는 과하지 않게)
+            let vt_summary = results
+                .get("virustotal")
+                .cloned()
+                .unwrap_or(Value::Null);
+            let inline = serde_json::json!({
+                "query_type": query_type,
+                "value": value,
+                "virustotal": {
+                    "status": vt_summary.get("status").cloned().unwrap_or(Value::Null),
+                    "detected": vt_summary.get("detected").cloned().unwrap_or(Value::Null),
+                    "stats": vt_summary.get("stats").cloned().unwrap_or(Value::Null)
+                }
+            });
+
+            let _ = svc.add_artifact(
+                session_id,
+                AnalysisArtifact {
+                    id: format!("artifact_{}", Uuid::new_v4()),
+                    kind: ArtifactKind::ReputationResult,
+                    created_at: ts,
+                    source_tool: tool_name.to_string(),
+                    metadata: serde_json::json!({
+                        "provider_statuses": provider_statuses,
+                        "query_type": query_type,
+                        "value": value
+                    }),
+                    data_ref: None,
+                    inline_data: Some(inline),
+                },
+            );
+            let _ = svc.add_event(
+                session_id,
+                AnalysisEvent {
+                    timestamp: ts,
+                    event_type: EventType::ArtifactAdded,
+                    severity: Severity::Info,
+                    details: serde_json::json!({ "kind": "reputation_result", "tool": tool_name }),
+                },
             );
         }
 

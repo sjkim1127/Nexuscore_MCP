@@ -288,7 +288,54 @@ impl AnalysisSessionService for InMemoryAnalysisSessionService {
 
         for raw in &raw_events {
             match serde_json::from_str::<Value>(raw) {
-                Ok(v) => {
+                Ok(mut v) => {
+                    // Normalize defaults (v1): ensure stable keys for downstream filtering/summary.
+                    if v.get("ts").is_none() {
+                        if let Some(t) = v.get("timestamp_ms").and_then(|x| x.as_u64()) {
+                            if let Some(obj) = v.as_object_mut() {
+                                obj.insert("ts".to_string(), Value::from(t));
+                            }
+                        } else if let Some(obj) = v.as_object_mut() {
+                            obj.insert("ts".to_string(), Value::from((ts as u128 * 1000) as u64));
+                        }
+                    }
+                    if v.get("pid").is_none() {
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.insert("pid".to_string(), pid.map(Value::from).unwrap_or(Value::Null));
+                        }
+                    }
+                    if v.get("source").is_none() {
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.insert("source".to_string(), Value::from("frida_unknown"));
+                        }
+                    }
+                    if v.get("event_type").is_none() {
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.insert("event_type".to_string(), Value::from("generic"));
+                        }
+                    }
+                    if v.get("category").is_none() {
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.insert("category".to_string(), Value::from("unknown"));
+                        }
+                    }
+                    if v.get("severity").is_none() {
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.insert("severity".to_string(), Value::from("info"));
+                        }
+                    }
+                    if v.get("payload").is_none() {
+                        // Backward compat: some scripts used {type, api, data}
+                        let payload = serde_json::json!({
+                            "type": v.get("type").cloned().unwrap_or(Value::Null),
+                            "api": v.get("api").cloned().unwrap_or(Value::Null),
+                            "data": v.get("data").cloned().unwrap_or(Value::Null),
+                        });
+                        if let Some(obj) = v.as_object_mut() {
+                            obj.insert("payload".to_string(), payload);
+                        }
+                    }
+
                     let sev = v
                         .get("severity")
                         .and_then(|x| x.as_str())

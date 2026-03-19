@@ -14,6 +14,23 @@
 
 'use strict';
 
+function send_event(partial) {
+    send({
+        ts: partial.ts || Date.now(),
+        pid: partial.pid || Process.id,
+        source: partial.source || "frida_stealth_unpacker",
+        event_type: partial.event_type || "hook",
+        category: partial.category || "process",
+        severity: partial.severity || "info",
+        payload: partial.payload || {},
+        tid: partial.tid || Process.getCurrentThreadId(),
+        module: partial.module || null,
+        callsite: partial.callsite || null,
+        stack: partial.stack || null,
+        tags: partial.tags || []
+    });
+}
+
 // ============================================
 // Anti-Debug Bypass Hooks
 // ============================================
@@ -26,7 +43,7 @@ if (pIsDebuggerPresent) {
             retval.replace(0);
         }
     });
-    send({ type: 'hook', name: 'IsDebuggerPresent', status: 'bypassed' });
+    send_event({ payload: { name: 'IsDebuggerPresent', status: 'bypassed' } });
 }
 
 // Hook CheckRemoteDebuggerPresent - Always set FALSE
@@ -46,7 +63,7 @@ if (pCheckRemoteDebuggerPresent) {
             retval.replace(1); // Return TRUE (success)
         }
     });
-    send({ type: 'hook', name: 'CheckRemoteDebuggerPresent', status: 'bypassed' });
+    send_event({ payload: { name: 'CheckRemoteDebuggerPresent', status: 'bypassed' } });
 }
 
 // Hook NtQueryInformationProcess - Handle debug-related queries
@@ -76,7 +93,7 @@ if (pNtQueryInformationProcess) {
             }
         }
     });
-    send({ type: 'hook', name: 'NtQueryInformationProcess', status: 'bypassed' });
+    send_event({ payload: { name: 'NtQueryInformationProcess', status: 'bypassed' } });
 }
 
 // Hook NtSetInformationThread - Block ThreadHideFromDebugger
@@ -91,7 +108,7 @@ if (pNtSetInformationThread) {
             }
         }
     });
-    send({ type: 'hook', name: 'NtSetInformationThread', status: 'bypassed' });
+    send_event({ payload: { name: 'NtSetInformationThread', status: 'bypassed' } });
 }
 
 // ============================================
@@ -110,7 +127,7 @@ if (pNtQuerySystemInformation) {
             // Can be extended to modify VM-related info
         }
     });
-    send({ type: 'hook', name: 'NtQuerySystemInformation', status: 'monitoring' });
+    send_event({ payload: { name: 'NtQuerySystemInformation', status: 'monitoring' } });
 }
 
 // ============================================

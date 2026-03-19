@@ -1,8 +1,21 @@
-use crate::tools::Tool;
+use crate::tools::{ParamDef, Tool, ToolSchema};
+use crate::utils::response::StandardResponse;
+use crate::app::analysis_session_service::{AnalysisSessionService, InMemoryAnalysisSessionService};
+use crate::state::analysis_session::{AnalysisArtifact, ArtifactKind, AnalysisEvent, EventType, Severity};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
+use std::time::Instant;
 use tokio::process::Command;
+use uuid::Uuid;
+
+fn now_unix() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
 
 pub struct HandleScanner;
 
@@ -15,8 +28,23 @@ impl Tool for HandleScanner {
         "Scans open handles and mutexes of a process using Sysinternals handle.exe. Args: pid (number)"
     }
 
+    fn schema(&self) -> ToolSchema {
+        ToolSchema::new(vec![
+            ParamDef::new("pid", "number", true, "Target process ID"),
+            ParamDef::new(
+                "analysis_session_id",
+                "string",
+                false,
+                "Optional analysis session ID to attach snapshot to",
+            ),
+        ])
+    }
+
     async fn execute(&self, args: Value) -> Result<Value> {
+        let start = Instant::now();
+        let tool_name = self.name();
         let pid = args["pid"].as_u64().ok_or(anyhow::anyhow!("Missing pid"))?;
+        let analysis_session_id = args["analysis_session_id"].as_str().map(|s| s.to_string());
 
         // Execute handle.exe -a (all types) -p <pid> -accepteula
         let output = Command::new("handle.exe")
@@ -38,6 +66,7 @@ impl Tool for HandleScanner {
                 let stdout = String::from_utf8_lossy(&out.stdout);
                 let lines: Vec<&str> = stdout.lines().collect();
                 let mut handles = Vec::new();
+                let mut type_counts: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
 
                 // Parsing simplified: Type : HandlePath
                 // Handle.exe output format:
@@ -60,6 +89,7 @@ impl Tool for HandleScanner {
                         if parts.len() > 4 {
                             let name = parts[4..].join(" ");
                             if !name.is_empty() {
+                                *type_counts.entry(obj_type.to_string()).or_insert(0) += 1;
                                 handles.push(serde_json::json!({
                                     "type": obj_type,
                                     "name": name
@@ -69,11 +99,46 @@ impl Tool for HandleScanner {
                     }
                 }
 
-                Ok(serde_json::json!({
-                    "pid": pid,
-                    "handle_count": handles.len(),
-                    "handles": handles
-                }))
+                if let Some(session_id) = analysis_session_id.as_deref() {
+                    let svc = InMemoryAnalysisSessionService;
+                    let ts = now_unix();
+                    let _ = svc.add_artifact(
+                        session_id,
+                        AnalysisArtifact {
+                            id: format!("artifact_{}", Uuid::new_v4()),
+                            kind: ArtifactKind::HandleSnapshot,
+                            created_at: ts,
+                            source_tool: tool_name.to_string(),
+                            metadata: serde_json::json!({
+                                "pid": pid,
+                                "handle_count": handles.len(),
+                                "type_counts": type_counts
+                            }),
+                            data_ref: None,
+                            inline_data: Some(serde_json::json!({ "handles": handles })),
+                        },
+                    );
+                    let _ = svc.add_event(
+                        session_id,
+                        AnalysisEvent {
+                            timestamp: ts,
+                            event_type: EventType::ArtifactAdded,
+                            severity: Severity::Info,
+                            details: serde_json::json!({ "kind": "handle_snapshot", "tool": tool_name }),
+                        },
+                    );
+                }
+
+                Ok(StandardResponse::success_timed(
+                    tool_name,
+                    serde_json::json!({
+                        "pid": pid,
+                        "handle_count": handles.len(),
+                        "type_counts": type_counts,
+                        "handles": handles
+                    }),
+                    start,
+                ))
             }
             Err(e) => Err(anyhow::anyhow!(
                 "Failed to run handle.exe. Is it in PATH? Error: {}",

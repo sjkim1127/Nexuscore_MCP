@@ -117,6 +117,12 @@ impl Tool for AnalysisSessionTimeline {
     fn schema(&self) -> ToolSchema {
         ToolSchema::new(vec![
             ParamDef::new("session_id", "string", true, "Analysis session ID"),
+            ParamDef::new(
+                "event_type",
+                "string",
+                false,
+                "Optional filter by event_type (snake_case enum)",
+            ),
             ParamDef::new("limit", "number", false, "Maximum events to return"),
         ])
     }
@@ -127,16 +133,24 @@ impl Tool for AnalysisSessionTimeline {
             Some(v) => v,
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
-        let limit = args["limit"].as_u64().unwrap_or(100) as usize;
+        let limit = args["limit"].as_u64().unwrap_or(50) as usize;
+        let event_type_filter = args["event_type"].as_str();
         let session = match session_store::get(session_id) {
             Ok(s) => s,
             Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
         };
 
         let mut timeline = session.timeline.clone();
-        if timeline.len() > limit {
-            timeline = timeline[timeline.len() - limit..].to_vec();
+        timeline.reverse(); // 최신순 고정
+
+        if let Some(et) = event_type_filter {
+            let parsed = match parse_event_type(et) {
+                Ok(v) => v,
+                Err(msg) => return Ok(StandardResponse::error(tool_name, &msg)),
+            };
+            timeline.retain(|e| e.event_type == parsed);
         }
+        timeline.truncate(limit);
 
         Ok(StandardResponse::success(
             tool_name,
@@ -160,12 +174,16 @@ impl Tool for AnalysisSessionArtifacts {
     }
 
     fn schema(&self) -> ToolSchema {
-        ToolSchema::new(vec![ParamDef::new(
-            "session_id",
-            "string",
-            true,
-            "Analysis session ID",
-        )])
+        ToolSchema::new(vec![
+            ParamDef::new("session_id", "string", true, "Analysis session ID"),
+            ParamDef::new(
+                "kind",
+                "string",
+                false,
+                "Optional filter by kind (snake_case enum)",
+            ),
+            ParamDef::new("limit", "number", false, "Maximum artifacts to return"),
+        ])
     }
 
     async fn execute(&self, args: Value) -> Result<Value> {
@@ -174,20 +192,81 @@ impl Tool for AnalysisSessionArtifacts {
             Some(v) => v,
             None => return Ok(StandardResponse::error(tool_name, "Missing session_id")),
         };
+        let limit = args["limit"].as_u64().unwrap_or(50) as usize;
+        let kind_filter = args["kind"].as_str();
         let session = match session_store::get(session_id) {
             Ok(s) => s,
             Err(e) => return Ok(StandardResponse::error(tool_name, &e.to_string())),
         };
 
+        let mut artifacts = session.artifacts.clone();
+        artifacts.reverse(); // 최신순 고정
+
+        if let Some(k) = kind_filter {
+            let parsed = match parse_artifact_kind(k) {
+                Ok(v) => v,
+                Err(msg) => return Ok(StandardResponse::error(tool_name, &msg)),
+            };
+            artifacts.retain(|a| a.kind == parsed);
+        }
+        artifacts.truncate(limit);
+
         Ok(StandardResponse::success(
             tool_name,
             serde_json::json!({
                 "session_id": session_id,
-                "artifact_count": session.artifacts.len(),
-                "artifacts": session.artifacts
+                "artifact_count": artifacts.len(),
+                "artifacts": artifacts
             }),
         ))
     }
+}
+
+fn parse_artifact_kind(s: &str) -> Result<crate::state::analysis_session::ArtifactKind, String> {
+    use crate::state::analysis_session::ArtifactKind::*;
+    let v = match s {
+        "static_report" => StaticReport,
+        "capa_result" => CapaResult,
+        "floss_result" => FlossResult,
+        "handle_snapshot" => HandleSnapshot,
+        "persistence_snapshot" => PersistenceSnapshot,
+        "frida_event_batch" => FridaEventBatch,
+        "debugger_output" => DebuggerOutput,
+        "cape_submission" => CapeSubmission,
+        "reputation_result" => ReputationResult,
+        "note" => Note,
+        _ => {
+            return Err(format!(
+                "Invalid kind '{}'. Allowed: static_report, capa_result, floss_result, handle_snapshot, persistence_snapshot, frida_event_batch, debugger_output, cape_submission, reputation_result, note",
+                s
+            ))
+        }
+    };
+    Ok(v)
+}
+
+fn parse_event_type(s: &str) -> Result<crate::state::analysis_session::EventType, String> {
+    use crate::state::analysis_session::EventType::*;
+    let v = match s {
+        "session_created" => SessionCreated,
+        "triage_started" => TriageStarted,
+        "status_changed" => StatusChanged,
+        "process_spawned" => ProcessSpawned,
+        "frida_attached" => FridaAttached,
+        "frida_batch_ingested" => FridaBatchIngested,
+        "monitoring_started" => MonitoringStarted,
+        "artifact_added" => ArtifactAdded,
+        "note_appended" => NoteAppended,
+        "session_ended" => SessionEnded,
+        "session_failed" => SessionFailed,
+        _ => {
+            return Err(format!(
+                "Invalid event_type '{}'. Allowed: session_created, triage_started, status_changed, process_spawned, frida_attached, frida_batch_ingested, monitoring_started, artifact_added, note_appended, session_ended, session_failed",
+                s
+            ))
+        }
+    };
+    Ok(v)
 }
 
 #[async_trait]

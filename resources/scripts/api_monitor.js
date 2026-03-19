@@ -44,13 +44,32 @@ function getTimestamp() {
     return new Date().toISOString();
 }
 
-function sendEvent(category, api, data) {
+function send_event(partial) {
     send({
-        type: 'api_call',
-        timestamp: getTimestamp(),
+        ts: partial.ts || Date.now(),
+        pid: partial.pid || Process.id,
+        source: partial.source || "frida_api_monitor",
+        event_type: partial.event_type || "api_call",
+        category: partial.category || "unknown",
+        severity: partial.severity || "info",
+        payload: partial.payload || {},
+        tid: partial.tid || Process.getCurrentThreadId(),
+        module: partial.module || null,
+        callsite: partial.callsite || null,
+        stack: partial.stack || null,
+        tags: partial.tags || []
+    });
+}
+
+function sendEvent(category, api, data) {
+    send_event({
         category: category,
-        api: api,
-        data: data
+        event_type: "api_call",
+        payload: {
+            api: api,
+            data: data,
+            timestamp: getTimestamp()
+        }
     });
 }
 

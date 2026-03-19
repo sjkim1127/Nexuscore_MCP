@@ -125,3 +125,123 @@ async fn test_spawn_process_with_session_id_links_pid_field() {
     assert!(status.structured_content.as_ref().unwrap()["data"]["linked"]["pid"].is_number());
 }
 
+#[tokio::test]
+async fn test_check_reputation_with_session_creates_artifact() {
+    let server = NexusCoreServer::new();
+    let created = server
+        .call_tool_internal(
+            "analysis_session_create".into(),
+            json!({ "sample_path": "C:\\tmp\\sample.exe" }),
+        )
+        .await
+        .unwrap();
+    let session_id = created.structured_content.as_ref().unwrap()["data"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let _ = server
+        .call_tool_internal(
+            "check_reputation".into(),
+            json!({ "type": "hash", "value": "00", "analysis_session_id": session_id }),
+        )
+        .await
+        .unwrap();
+
+    let artifacts = server
+        .call_tool_internal(
+            "analysis_session_artifacts".into(),
+            json!({ "session_id": created.structured_content.as_ref().unwrap()["data"]["session_id"].clone(), "kind": "reputation_result" }),
+        )
+        .await
+        .unwrap();
+    assert!(!artifacts.is_error.unwrap_or(true));
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn test_scan_persistence_with_session_creates_artifact() {
+    let server = NexusCoreServer::new();
+    let created = server
+        .call_tool_internal(
+            "analysis_session_create".into(),
+            json!({ "sample_path": "C:\\tmp\\sample.exe" }),
+        )
+        .await
+        .unwrap();
+    let session_id = created.structured_content.as_ref().unwrap()["data"]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let res = server
+        .call_tool_internal(
+            "scan_persistence".into(),
+            json!({ "analysis_session_id": session_id }),
+        )
+        .await
+        .unwrap();
+    assert!(!res.is_error.unwrap_or(true));
+
+    let artifacts = server
+        .call_tool_internal(
+            "analysis_session_artifacts".into(),
+            json!({ "session_id": created.structured_content.as_ref().unwrap()["data"]["session_id"].clone(), "kind": "persistence_snapshot" }),
+        )
+        .await
+        .unwrap();
+    assert!(!artifacts.is_error.unwrap_or(true));
+}
+
+#[tokio::test]
+async fn test_filters_invalid_kind_returns_error() {
+    let server = NexusCoreServer::new();
+    let created = server
+        .call_tool_internal(
+            "analysis_session_create".into(),
+            json!({ "sample_path": "C:\\tmp\\sample.exe" }),
+        )
+        .await
+        .unwrap();
+    let session_id = created.structured_content.as_ref().unwrap()["data"]["session_id"]
+        .as_str()
+        .unwrap();
+
+    let res = server
+        .call_tool_internal(
+            "analysis_session_artifacts".into(),
+            json!({ "session_id": session_id, "kind": "typo_kind" }),
+        )
+        .await
+        .unwrap();
+    assert!(res.is_error.unwrap_or(false));
+    let sc = res.structured_content.as_ref().unwrap();
+    assert_eq!(sc["status"], "error");
+}
+
+#[tokio::test]
+async fn test_filters_invalid_event_type_returns_error() {
+    let server = NexusCoreServer::new();
+    let created = server
+        .call_tool_internal(
+            "analysis_session_create".into(),
+            json!({ "sample_path": "C:\\tmp\\sample.exe" }),
+        )
+        .await
+        .unwrap();
+    let session_id = created.structured_content.as_ref().unwrap()["data"]["session_id"]
+        .as_str()
+        .unwrap();
+
+    let res = server
+        .call_tool_internal(
+            "analysis_session_timeline".into(),
+            json!({ "session_id": session_id, "event_type": "typo_event" }),
+        )
+        .await
+        .unwrap();
+    assert!(res.is_error.unwrap_or(false));
+    let sc = res.structured_content.as_ref().unwrap();
+    assert_eq!(sc["status"], "error");
+}
+

@@ -29,8 +29,25 @@ pub trait AnalysisSessionService {
         raw_events: Vec<String>,
         dropped_count: u64,
     ) -> Result<AnalysisArtifact>;
+    fn attach_cape_report_once(
+        &self,
+        session_id: &str,
+        job_id: &str,
+        base_url: &str,
+        task_id: Option<u64>,
+        status: &str,
+        report: &Value,
+    ) -> Result<AttachResult>;
     fn set_failed(&self, session_id: &str, error: &str) -> Result<()>;
     fn complete(&self, session_id: &str) -> Result<()>;
+}
+
+#[derive(Debug, Clone)]
+pub struct AttachResult {
+    pub artifact_created: bool,
+    pub already_attached: bool,
+    pub artifact_id: Option<String>,
+    pub report_fingerprint: Option<String>,
 }
 
 pub struct InMemoryAnalysisSessionService;
@@ -120,6 +137,9 @@ impl AnalysisSessionService for InMemoryAnalysisSessionService {
                 pid: None,
                 frida_session_id: None,
                 debug_session_id: None,
+            },
+            attached: AttachedArtifacts {
+                cape_reports: std::collections::HashMap::new(),
             },
             timeline: vec![],
             artifacts: vec![],
@@ -431,6 +451,146 @@ impl AnalysisSessionService for InMemoryAnalysisSessionService {
         )?;
 
         Ok(artifact)
+    }
+
+    fn attach_cape_report_once(
+        &self,
+        session_id: &str,
+        job_id: &str,
+        base_url: &str,
+        task_id: Option<u64>,
+        status: &str,
+        report: &Value,
+    ) -> Result<AttachResult> {
+        use sha2::{Digest, Sha256};
+
+        let ts = now_unix();
+
+        // 1) compute report_hash (best-effort)
+        let report_hash = serde_json::to_vec(report)
+            .ok()
+            .map(|bytes| {
+                let mut hasher = Sha256::new();
+                hasher.update(&bytes);
+                hex::encode(hasher.finalize())
+            });
+
+        // 2) build normalized summary (small)
+        let score = report
+            .pointer("/info/score")
+            .and_then(|v| v.as_f64())
+            .or_else(|| report.pointer("/analysis/score").and_then(|v| v.as_f64()));
+
+        let signatures = report.get("signatures").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        let signatures_count = signatures.len() as u64;
+        let signatures_summary: Vec<Value> = signatures
+            .iter()
+            .take(10)
+            .map(|s| {
+                serde_json::json!({
+                    "name": s.get("name").cloned().unwrap_or(Value::Null),
+                    "description": s.get("description").cloned().unwrap_or(Value::Null)
+                })
+            })
+            .collect();
+
+        let network_count = report
+            .get("network")
+            .and_then(|n| n.as_object())
+            .map(|o| {
+                o.values()
+                    .filter_map(|v| v.as_array().map(|a| a.len() as u64))
+                    .sum::<u64>()
+            });
+
+        let summary = serde_json::json!({
+            "score": score,
+            "signatures_count": signatures_count,
+            "network_count": network_count,
+            "signatures_summary": signatures_summary
+        });
+
+        let summary_hash = {
+            let bytes = serde_json::to_vec(&summary)?;
+            let mut hasher = Sha256::new();
+            hasher.update(&bytes);
+            hex::encode(hasher.finalize())
+        };
+
+        // 3) fingerprint priority (fixed)
+        let fingerprint = if let Some(tid) = task_id {
+            format!("cape:{}:{}", job_id, tid)
+        } else if let Some(rh) = report_hash.as_deref() {
+            format!("cape:{}:{}", job_id, rh)
+        } else {
+            format!("cape:{}:{}", job_id, summary_hash)
+        };
+
+        // 4) dedupe via attached.cape_reports map (fixed)
+        let existing_id = session_store::get(session_id)
+            .ok()
+            .and_then(|s| s.attached.cape_reports.get(&fingerprint).cloned());
+
+        if let Some(existing_id) = existing_id {
+            return Ok(AttachResult {
+                artifact_created: false,
+                already_attached: true,
+                artifact_id: Some(existing_id),
+                report_fingerprint: Some(fingerprint),
+            });
+        }
+
+        let artifact_id = format!("artifact_{}", Uuid::new_v4());
+        let artifact = AnalysisArtifact {
+            id: artifact_id.clone(),
+            kind: ArtifactKind::CapeReport,
+            created_at: ts,
+            source_tool: "cape_check_status".to_string(),
+            metadata: serde_json::json!({
+                "job_id": job_id,
+                "base_url": base_url,
+                "task_id": task_id,
+                "status": status,
+                "score": score,
+                "signatures_count": signatures_count,
+                "network_count": network_count,
+                "report_fingerprint": fingerprint,
+                "report_hash": report_hash,
+                "truncated": false
+            }),
+            data_ref: None,
+            inline_data: Some(summary),
+        };
+
+        self.add_artifact(session_id, artifact.clone())?;
+
+        // register dedupe mapping
+        session_store::update(session_id, |s| {
+            s.attached.cape_reports.insert(fingerprint.clone(), artifact_id.clone());
+            Ok(())
+        })?;
+
+        self.add_event(
+            session_id,
+            AnalysisEvent {
+                timestamp: ts,
+                event_type: EventType::ArtifactAdded,
+                severity: Severity::Info,
+                details: serde_json::json!({ "kind": "cape_report", "tool": "cape_check_status" }),
+            },
+        )?;
+
+        Ok(AttachResult {
+            artifact_created: true,
+            already_attached: false,
+            artifact_id: Some(artifact.id),
+            report_fingerprint: Some(
+                artifact.metadata["report_fingerprint"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
+            ),
+        })
     }
 
     fn set_failed(&self, session_id: &str, error: &str) -> Result<()> {

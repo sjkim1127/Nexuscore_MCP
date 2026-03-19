@@ -233,11 +233,12 @@ fn parse_artifact_kind(s: &str) -> Result<crate::state::analysis_session::Artifa
         "frida_event_batch" => FridaEventBatch,
         "debugger_output" => DebuggerOutput,
         "cape_submission" => CapeSubmission,
+        "cape_report" => CapeReport,
         "reputation_result" => ReputationResult,
         "note" => Note,
         _ => {
             return Err(format!(
-                "Invalid kind '{}'. Allowed: static_report, capa_result, floss_result, handle_snapshot, persistence_snapshot, frida_event_batch, debugger_output, cape_submission, reputation_result, note",
+                "Invalid kind '{}'. Allowed: static_report, capa_result, floss_result, handle_snapshot, persistence_snapshot, frida_event_batch, debugger_output, cape_submission, cape_report, reputation_result, note",
                 s
             ))
         }

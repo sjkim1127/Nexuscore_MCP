@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 pub const TIMELINE_MAX: usize = 1_000;
 pub const ARTIFACT_INLINE_MAX_BYTES: usize = 64 * 1024;
@@ -28,6 +29,7 @@ pub enum ArtifactKind {
     FridaEventBatch,
     DebuggerOutput,
     CapeSubmission,
+    CapeReport,
     ReputationResult,
     Note,
 }
@@ -93,6 +95,12 @@ pub struct AnalysisSession {
     pub updated_at: u64,
     pub last_error: Option<String>,
     pub linked: LinkedSessions,
+    pub attached: AttachedArtifacts,
     pub timeline: Vec<AnalysisEvent>,
     pub artifacts: Vec<AnalysisArtifact>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttachedArtifacts {
+    pub cape_reports: HashMap<String, String>, // report_fingerprint -> artifact_id
 }

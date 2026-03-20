@@ -140,7 +140,7 @@ impl FridaWorker {
     fn run(&mut self) -> Result<()> {
         // IMPORTANT: Frida must be obtained and used within the SAME thread.
         let frida = unsafe { Frida::obtain() };
-        let mut dm = DeviceManager::obtain(&frida);
+        let dm = DeviceManager::obtain(&frida);
         let mut device = dm.get_local_device()?;
         
         // Safety: We extend lifetimes to 'static because this thread owns these objects
@@ -255,7 +255,7 @@ impl FridaWorker {
             .ok_or_else(|| anyhow!("Session not found: {}", session_id))?;
 
         let script = managed.session.create_script(&script_content, &mut ScriptOption::default())?;
-        let mut script_static: frida::Script<'static> = unsafe { std::mem::transmute(script) };
+        let script_static: frida::Script<'static> = unsafe { std::mem::transmute(script) };
         
         let messages_clone = Arc::clone(&managed.messages);
         
@@ -264,7 +264,9 @@ impl FridaWorker {
             fn on_message(&mut self, message: frida::Message, _data: Option<Vec<u8>>) {
                 let encoded = serde_json::json!({
                     "source": "frida_script",
-                    "payload": message,
+                    // `frida::Message` does not implement `serde::Serialize`.
+                    // Store a string representation so we can ingest it into analysis sessions.
+                    "payload": format!("{:?}", message),
                     "timestamp_ms": std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_millis() as u64)
@@ -349,7 +351,7 @@ impl FridaWorker {
         session_id: String
     ) -> Result<()> {
         if let Some(mut managed) = sessions.remove(&session_id) {
-            for mut script in managed.scripts {
+            for script in managed.scripts {
                 let _ = script.unload();
             }
             let _ = managed.session.detach();
@@ -366,8 +368,8 @@ impl FridaWorker {
         sessions: &mut HashMap<String, ManagedSession<'static>>, 
         device: &mut Device<'static>
     ) -> Result<()> {
-        for (_, mut managed) in sessions.drain() {
-            for mut script in managed.scripts {
+        for (_, managed) in sessions.drain() {
+            for script in managed.scripts {
                 let _ = script.unload();
             }
             let _ = managed.session.detach();

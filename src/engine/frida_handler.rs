@@ -255,7 +255,7 @@ impl FridaWorker {
             .ok_or_else(|| anyhow!("Session not found: {}", session_id))?;
 
         let script = managed.session.create_script(&script_content, &mut ScriptOption::default())?;
-        let script_static: frida::Script<'static> = unsafe { std::mem::transmute(script) };
+        let mut script_static: frida::Script<'static> = unsafe { std::mem::transmute(script) };
         
         let messages_clone = Arc::clone(&managed.messages);
         
